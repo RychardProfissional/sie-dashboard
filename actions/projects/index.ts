@@ -90,6 +90,40 @@ export async function createLegalInstrument(slug: string, result: ProjectClassif
 
     const type = result.type as LegalInstrumentType
 
+    // Phase 2: Save classification data directly to Project instead of creating an instance
+    const updatedProject = await prisma.project.update({
+      where: { slug: slug },
+      data: {
+        proposedInstrumentType: type,
+        classificationAnswers: (result.history ?? []) as unknown as Prisma.InputJsonValue,
+      },
+    })
+
+    if (!updatedProject) return { success: false, error: APP_ERRORS.PROJECT_CREATE_LEGAL_INSTRUMENTS.code }
+
+    revalidatePath(`/projetos/${slug}`)
+    revalidatePath(`/projetos/${slug}/legal-instrument`)
+
+    return { success: true, error: null }
+  } catch (error) {
+    console.error("Error saving project classification:", error)
+    return { success: false, error: APP_ERRORS.GENERIC_ERROR.code }
+  }
+}
+
+/**
+ * Action exclusive for admins to formally classify a project and create the official legal instrument instance.
+ * @param slug Project slug
+ * @param type Chosen LegalInstrumentType
+ */
+export async function classifyProject(slug: string, type: LegalInstrumentType): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) return { success: false, error: "Unauthorized" }
+
+    // Verify admin/approver has permission
+    await PermissionsService.authorize(session.user.id, { slug: "projects.approve" })
+
     const legalInstrument = await prisma.legalInstrument.findUnique({
       where: { type },
       select: {
@@ -101,19 +135,19 @@ export async function createLegalInstrument(slug: string, result: ProjectClassif
       },
     })
 
-    if (!legalInstrument) return { success: false, error: APP_ERRORS.PROJECT_CREATE_LEGAL_INSTRUMENTS.code }
+    if (!legalInstrument) return { success: false, error: "Instrument not found" }
 
     const project = await prisma.project.findUnique({
       where: { slug: slug },
       select: { id: true, legalInstrumentInstance: { select: { id: true } } },
     })
-    if (!project) return { success: false, error: APP_ERRORS.PROJECT_CREATE_LEGAL_INSTRUMENTS.code }
+    if (!project) return { success: false, error: "Project not found" }
 
     if (project.legalInstrumentInstance) {
-      return { success: false, error: APP_ERRORS.PROJECT_CREATE_LEGAL_INSTRUMENTS.code }
+      return { success: false, error: "Project already classified" }
     }
 
-    const createdInstance = await prisma.$transaction(
+    await prisma.$transaction(
       async (prismaTx) => {
         const existingVersion = await prismaTx.legalInstrumentVersion.findUnique({
           where: {
@@ -155,20 +189,16 @@ export async function createLegalInstrument(slug: string, result: ProjectClassif
           data: {
             projectId: project.id,
             legalInstrumentVersionId,
-            projectClassificationAnswers: (result.history ?? []) as unknown as Prisma.InputJsonValue,
+            status: "PENDING",
           },
         })
 
-        const full = await prismaTx.legalInstrumentInstance.findUnique({
-          where: { id: instance.id },
-          ...legalInstrumentInstanceForProjectValidator,
+        // Log the action as PROJECT_CLASSIFIED
+        await logProjectAction(project.id, "PROJECT_CLASSIFIED", session.user.id, {
+          instrumentType: type,
         })
 
-        if (!full) {
-          throw new Error("failed_to_load_instance")
-        }
-
-        return full
+        return instance
       },
       {
         timeout: 10000,
@@ -176,10 +206,13 @@ export async function createLegalInstrument(slug: string, result: ProjectClassif
       }
     )
 
-    return { success: true, error: null, created: createdInstance }
-  } catch (error) {
-    console.error("Error creating legal instrument:", error)
-    return { success: false, error: APP_ERRORS.GENERIC_ERROR.code }
+    revalidatePath(`/projetos/${slug}`)
+    revalidatePath(`/admin/projetos/${slug}/review`)
+
+    return { success: true, error: null }
+  } catch (error: any) {
+    console.error("Error classifying project:", error)
+    return { success: false, error: error?.message || APP_ERRORS.GENERIC_ERROR.code }
   }
 }
 
@@ -320,9 +353,6 @@ export async function submitProjectForApproval(slug: string): Promise<Project> {
   const project = await prisma.project.findUnique({
     where: { slug },
     include: {
-      legalInstrumentInstance: {
-        select: { status: true },
-      },
       workPlan: true,
     },
   })
@@ -333,18 +363,13 @@ export async function submitProjectForApproval(slug: string): Promise<Project> {
   }
 
   // Validate that project is in DRAFT or RETURNED status
-  if (project.status !== ProjectStatus.DRAFT && project.status !== (ProjectStatus as any).RETURNED) {
+  if (project.status !== ProjectStatus.DRAFT && (project.status as any) !== ProjectStatus.RETURNED) {
     throw new Error("Project cannot be submitted in its current status")
   }
 
-  // Validate dependencies
-  if (!project.legalInstrumentInstance) {
-    throw new Error("Project must have a legal instrument before submission")
-  }
-
-  const status = project.legalInstrumentInstance.status || LegalInstrumentStatus.PENDING
-  if (status !== LegalInstrumentStatus.FILLED) {
-    throw new Error("Legal instrument must be filled before submission")
+  // Phase 2: Validate classification wizard instead of legalInstrumentInstance
+  if (!(project as any).proposedInstrumentType || !(project as any).classificationAnswers) {
+    throw new Error("Project must have a legal instrument classification before submission")
   }
 
   if (!project.workPlan) {
@@ -459,9 +484,6 @@ export async function startProjectReview(slug: string): Promise<Project> {
   } catch (e) {
     console.error("log startProjectReview error", e)
   }
-
-  revalidatePath(`/admin/projetos/${slug}/review`)
-  revalidatePath("/admin/projetos")
 
   return updated
 }

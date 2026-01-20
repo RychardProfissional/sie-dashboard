@@ -72,6 +72,10 @@ model Project {
   scope         String  @db.Text
 
   status ProjectStatus @default(DRAFT)
+  
+  // Classification metadata from Wizard
+  proposedInstrumentType LegalInstrumentType?
+  classificationAnswers  Json? @db.JsonB
 
   // Timestamp of last status transition
   statusUpdatedAt DateTime @default(now())

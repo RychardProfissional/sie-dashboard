@@ -12,10 +12,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { notify } from "@/lib/notifications"
-import { Loader2, Plus, Trash2 } from "lucide-react"
+import { Loader2, Plus, Trash2, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import LoadingOverlay from "@/components/ui/loading-overlay"
 import { useRouter, useSearchParams } from "next/navigation"
+import { ProjectStatus } from "@prisma/client"
 
 export default function Page() {
   const searchParams = useSearchParams()
@@ -90,7 +91,7 @@ export default function Page() {
               planScope: data.planScope || "",
               planJustification: data.planJustification || "",
               generalObjective: data.generalObjective || "",
-              specificObjectives: data.specificObjectives.map(so => ({value: so})) || [],
+              specificObjectives: data.specificObjectives.map((so) => ({ value: so })) || [],
               methodology: data.methodology || "",
               responsibleUnit: data.responsibleUnit || "",
               ictManager: data.ictManager || "",
@@ -200,252 +201,270 @@ export default function Page() {
         <p className="text-muted-foreground mt-2">Defina os detalhes, objetivos e metodologia do projeto.</p>
       </div>
 
+      {project && project.status !== ProjectStatus.DRAFT && (project.status as any) !== "RETURNED" && (
+        <div className="rounded-md bg-yellow-50 p-4 border border-yellow-200">
+          <div className="flex">
+            <div className="shrink-0">
+              <AlertCircle className="h-5 w-5 text-yellow-400" aria-hidden="true" />
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-yellow-800">Modo de Leitura</h3>
+              <div className="mt-2 text-sm text-yellow-700">
+                <p>O plano de trabalho não pode ser editado no momento pois o projeto está em análise ou já foi aprovado.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Informações Gerais</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="object"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Objeto</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Descreva o objeto do plano..." className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <fieldset disabled={project && project.status !== ProjectStatus.DRAFT && (project.status as any) !== "RETURNED"} className="space-y-8 group-disabled:opacity-80">
+            <Card>
+              <CardHeader>
+                <CardTitle>Informações Gerais</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="validityStart"
+                  name="object"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Início da Vigência</FormLabel>
+                      <FormLabel>Objeto</FormLabel>
                       <FormControl>
-                        <Input type="date" value={field.value ? new Date(field.value).toISOString().split("T")[0] : ""} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : null)} />
+                        <Textarea placeholder="Descreva o objeto do plano..." className="min-h-[100px]" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="validityEnd"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fim da Vigência</FormLabel>
-                      <FormControl>
-                        <Input type="date" value={field.value ? new Date(field.value).toISOString().split("T")[0] : ""} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : null)} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Diagnóstico e Justificativa</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="diagnosis"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Diagnóstico</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Diagnóstico da situação atual..." className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="planJustification"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Justificativa</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Justificativa para o plano..." className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="planScope"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Abrangência</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Abrangência do plano..." className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Objetivos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <FormField
-                control={form.control}
-                name="generalObjective"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Objetivo Geral</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Objetivo geral do projeto..." className="min-h-20" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <FormLabel>Objetivos Específicos</FormLabel>
-                  <Button type="button" variant="outline" size="sm" onClick={() => append({value: ''})}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar
-                  </Button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="validityStart"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Início da Vigência</FormLabel>
+                        <FormControl>
+                          <Input type="date" value={field.value ? new Date(field.value).toISOString().split("T")[0] : ""} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : null)} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="validityEnd"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Fim da Vigência</FormLabel>
+                        <FormControl>
+                          <Input type="date" value={field.value ? new Date(field.value).toISOString().split("T")[0] : ""} onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : null)} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-                {fields.map((field, index) => (
-                  <div key={field.id} className="flex gap-2">
-                    <FormField
-                      control={form.control}
-                      name={`specificObjectives.${index}.value`}
-                      render={({ field }) => (
-                        <FormItem className="flex-1">
-                          <FormControl>
-                            <Input {...field} placeholder={`Objetivo específico ${index + 1}`} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Diagnóstico e Justificativa</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="diagnosis"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Diagnóstico</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Diagnóstico da situação atual..." className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="planJustification"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Justificativa</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Justificativa para o plano..." className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="planScope"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Abrangência</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Abrangência do plano..." className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Objetivos</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="generalObjective"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Objetivo Geral</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Objetivo geral do projeto..." className="min-h-20" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Objetivos Específicos</FormLabel>
+                    <Button type="button" variant="outline" size="sm" onClick={() => append({ value: "" })}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar
                     </Button>
                   </div>
-                ))}
-                {fields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum objetivo específico adicionado.</p>}
-              </div>
-            </CardContent>
-          </Card>
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex gap-2">
+                      <FormField
+                        control={form.control}
+                        name={`specificObjectives.${index}.value`}
+                        render={({ field }) => (
+                          <FormItem className="flex-1">
+                            <FormControl>
+                              <Input {...field} placeholder={`Objetivo específico ${index + 1}`} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  {fields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum objetivo específico adicionado.</p>}
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Metodologia e Resultados</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="methodology"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Metodologia</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Metodologia a ser aplicada..." className="min-h-[150px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="expectedResults"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Resultados Esperados</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Resultados esperados..." className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="monitoring"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monitoramento e Avaliação</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Como será feito o monitoramento..." className="min-h-[100px]" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Metodologia e Resultados</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="methodology"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Metodologia</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Metodologia a ser aplicada..." className="min-h-[150px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="expectedResults"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Resultados Esperados</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Resultados esperados..." className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="monitoring"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Monitoramento e Avaliação</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Como será feito o monitoramento..." className="min-h-[100px]" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Responsáveis</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="responsibleUnit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unidade Responsável</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Unidade responsável..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="ictManager"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Gestor da ICT</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome do gestor da ICT..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="partnerManager"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Gestor do Parceiro</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome do gestor do parceiro..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Responsáveis</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="responsibleUnit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Unidade Responsável</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Unidade responsável..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="ictManager"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gestor da ICT</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nome do gestor da ICT..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="partnerManager"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gestor do Parceiro</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nome do gestor do parceiro..." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </fieldset>
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={saving} size="lg">
+            <Button type="submit" disabled={saving || (project && project.status !== ProjectStatus.DRAFT && (project.status as any) !== "RETURNED")} size="lg">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar Plano de Trabalho
             </Button>

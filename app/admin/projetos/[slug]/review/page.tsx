@@ -15,12 +15,13 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { notify } from "@/lib/notifications"
-import { startProjectReview } from "@/actions/projects"
+import { startProjectReview, classifyProject } from "@/actions/projects"
 import { useProject } from "@/components/providers/project"
 import { UserAvatar } from "@/components/user-avatar"
-import { ProjectStatus } from "@prisma/client"
+import { ProjectStatus, LegalInstrumentType } from "@prisma/client"
 import { PageHeader, PageShell, PageBack, PageHeaderHeading } from "@/components/shell"
 import { ProjectStatusBadge } from "@/components/projects/status-badge"
+import { Separator } from "@/components/ui/separator"
 
 import { RejectProjectDialog } from "@/components/admin/projects/review/reject-project-dialog"
 import { ReturnProjectDialog } from "@/components/admin/projects/review/return-project-dialog"
@@ -43,10 +44,12 @@ export default function ProjectReviewPage() {
   const params = useParams()
   const router = useRouter()
   const slug = params.slug as string
-  const { project, loading } = useProject()
+  const { project, loading, refetch } = useProject()
   const { data: session } = useSession()
 
   const [isStartingReview, setIsStartingReview] = useState(false)
+  const [selectedInstrumentType, setSelectedInstrumentType] = useState<LegalInstrumentType | "">("")
+  const [isClassifying, setIsClassifying] = useState(false)
 
   if (loading) {
     return (
@@ -66,13 +69,32 @@ export default function ProjectReviewPage() {
     try {
       setIsStartingReview(true)
       await startProjectReview(slug)
+      await refetch(false)
       notify.success("Análise iniciada com sucesso!")
-      router.refresh()
     } catch (error: unknown) {
       console.error(error)
       notify.error(getErrorMessage(error) ?? "Erro ao iniciar análise")
     } finally {
       setIsStartingReview(false)
+    }
+  }
+
+  const handleClassify = async () => {
+    if (!selectedInstrumentType) return
+    try {
+      setIsClassifying(true)
+      const res = await classifyProject(slug, selectedInstrumentType as LegalInstrumentType)
+      if (res.success) {
+        notify.success("Projeto classificado com sucesso!")
+        await refetch(false)
+      } else {
+        notify.error(res.error || "Erro ao classificar projeto")
+      }
+    } catch (error: unknown) {
+      console.error(error)
+      notify.error(getErrorMessage(error) ?? "Erro ao classificar projeto")
+    } finally {
+      setIsClassifying(false)
     }
   }
 
@@ -568,17 +590,81 @@ export default function ProjectReviewPage() {
               })}
             </div>
           ) : (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <div className="p-4 rounded-full bg-muted/50 mb-4">
-                  <Link href="/admin/projetos" className="cursor-default">
-                    <Scale className="h-8 w-8 text-muted-foreground/50" />
-                  </Link>
-                </div>
-                <p className="text-muted-foreground font-medium">Instrumento jurídico não associado</p>
-                <p className="text-xs text-muted-foreground mt-1">Este projeto ainda não possui definições jurídicas.</p>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card className="border-blue-200 bg-blue-50/30">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Scale className="h-5 w-5 text-blue-600" />
+                    <CardTitle className="text-lg">Classificação Técnica Necessária</CardTitle>
+                  </div>
+                  <CardDescription>O projeto ainda não possui um instrumento jurídico oficial. Analise as respostas do proponente abaixo e defina o instrumento adequado.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Wizard Answers Section */}
+                  {(project as any).classificationAnswers && Array.isArray((project as any).classificationAnswers) && (
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-semibold flex items-center gap-2">
+                        <History className="h-4 w-4" /> Respostas do Wizard de Classificação
+                      </h4>
+                      <div className="grid gap-3">
+                        {((project as any).classificationAnswers as any[]).map((item: any, idx: number) => (
+                          <div key={idx} className="flex flex-col p-3 rounded-lg bg-white border shadow-xs">
+                            <p className="text-sm font-medium text-foreground">{item.question}</p>
+                            <Badge variant="outline" className={cn("mt-2 w-fit px-2 py-0.5 text-[10px] font-bold uppercase", item.answer === "Sim" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200")}>
+                              {item.answer}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* Recommendation and Choice Section */}
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Sugestão do Sistema</p>
+                      <div className="p-4 rounded-xl border border-dashed flex items-center justify-between bg-white/50">
+                        <span className="font-semibold text-primary">{(project as any).proposedInstrumentType ? legalInstrumentTypeLabel((project as any).proposedInstrumentType as any) : "Não informada"}</span>
+                        {(project as any).proposedInstrumentType && (
+                          <Button variant="ghost" size="sm" className="text-xs text-blue-600 hover:text-blue-700 h-7" onClick={() => setSelectedInstrumentType((project as any).proposedInstrumentType as any)}>
+                            Usar Sugestão
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Escolha do Administrador</p>
+                      <div className="flex gap-2">
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          value={selectedInstrumentType}
+                          onChange={(e) => setSelectedInstrumentType(e.target.value as LegalInstrumentType)}
+                        >
+                          <option value="">Selecione um instrumento...</option>
+                          {Object.values(LegalInstrumentType).map((type) => (
+                            <option key={type} value={type}>
+                              {legalInstrumentTypeLabel(type)}
+                            </option>
+                          ))}
+                        </select>
+                        <Button className="shrink-0 shadow-lg shadow-blue-500/20" disabled={!selectedInstrumentType || isClassifying} onClick={handleClassify}>
+                          {isClassifying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Information about importance */}
+              <div className="p-4 rounded-lg bg-muted/20 border border-dashed flex gap-3 items-start">
+                <AlertCircle className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground leading-relaxed">A classificação correta é fundamental para garantir a segurança jurídica da parceria. Ao confirmar, o proponente receberá acesso imediato aos campos detalhados do instrumento escolhido.</p>
+              </div>
+            </div>
           )}
         </TabsContent>
         <TabsContent value="history" className="space-y-6">

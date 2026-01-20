@@ -11,4 +11,5 @@ export const BREADCRUMB_MAP: Record<string, string> = {
   "legal-instrument": "Instrumento Jurídico",
   "legal-instruments": "Instrumentos Jurídicos",
   "work-plan": "Plano de negócio",
+  notificacoes: "Notificações",
 }

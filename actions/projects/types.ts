@@ -46,6 +46,8 @@ export const projectWithRelationsValidator = Prisma.validator<Prisma.ProjectDefa
         user: { select: { name: true } },
       },
     },
+    // Essas colunas escalares são incluídas automaticamente pelo Prisma:
+    // proposedInstrumentType, classificationAnswers
   },
 })
 

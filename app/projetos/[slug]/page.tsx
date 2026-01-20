@@ -26,6 +26,7 @@ import type { ProjectDependences } from "@/components/providers/project"
 import type { LegalInstrumentFieldSpec } from "@/types/legal-instrument"
 import { legalInstrumentTypeLabel } from "@/lib/utils/legal-instrument"
 import { ProjectStatusBadge } from "@/components/projects/status-badge"
+import { ExportPdfButton } from "@/components/projects/export-pdf-button"
 
 type MissingDependency = {
   id: string
@@ -85,17 +86,16 @@ export default function ProjectDetailsPage() {
   const missingDependencies: MissingDependency[] = []
 
   const hasWorkPlan = !!workPlan
-  const hasLegalInstrument = !!legalInstrumentInstance
-  const hasPendingInstrument = hasLegalInstrument && (legalInstrumentInstance.status || LegalInstrumentStatus.PENDING) !== LegalInstrumentStatus.FILLED
+  const hasLegalInstrument = !!legalInstrumentInstance || (!!(project as any).proposedInstrumentType && !!(project as any).classificationAnswers)
+  const hasPendingInstrument = !!legalInstrumentInstance && (legalInstrumentInstance.status || LegalInstrumentStatus.PENDING) !== LegalInstrumentStatus.FILLED
 
-  const canSubmit = view?.allowActions && hasWorkPlan && hasLegalInstrument && !hasPendingInstrument && (project.status === ProjectStatus.DRAFT || (project.status as any) === "RETURNED")
+  const canSubmit = view?.allowActions && hasWorkPlan && hasLegalInstrument && (project.status === ProjectStatus.DRAFT || (project.status as any) === "RETURNED")
 
   // Mensagem de feedback para botão desabilitado
   const getSubmitDisabledReason = () => {
     if (project.status !== ProjectStatus.DRAFT && (project.status as any) !== "RETURNED") return "Projeto já foi enviado"
     if (!hasWorkPlan) return "É necessário criar o Plano de Trabalho"
-    if (!hasLegalInstrument) return "É necessário selecionar um Instrumento Jurídico"
-    if (hasPendingInstrument) return "É necessário preencher completamente o Instrumento Jurídico"
+    if (!hasLegalInstrument) return "É necessário realizar a Classificação do Projeto (Wizard)"
     return null
   }
 
@@ -218,11 +218,12 @@ export default function ProjectDetailsPage() {
               </Tooltip>
             </TooltipProvider>
           )}
-          {view?.allowActions && (
+          {view?.allowActions && (project.status === ProjectStatus.DRAFT || (project.status as any) === "RETURNED") && (
             <Button onClick={() => setIsEditSheetOpen(true)}>
               <Edit className="mr-2 h-4 w-4" /> Editar Detalhes
             </Button>
           )}
+          <ExportPdfButton project={project} />
         </div>
       </PageHeader>
 
@@ -606,144 +607,189 @@ export default function ProjectDetailsPage() {
 
                   const actionLabel = status === LegalInstrumentStatus.FILLED ? "Revisar Respostas" : status === LegalInstrumentStatus.PARTIAL ? "Continuar Preenchimento" : "Iniciar Preenchimento"
 
+                  const isReviewingDocument = project.status === ProjectStatus.PENDING_REVIEW || project.status === ProjectStatus.UNDER_REVIEW
+
                   return (
-                    <div className="grid gap-6 lg:grid-cols-12 items-stretch">
-                      {/* Header Status Card */}
-                      <Card className="overflow-hidden border-none col-span-7 shadow-md bg-linear-to-br from-card to-muted/30">
-                        <CardHeader className="pb-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                                  <Scale className="h-5 w-5" />
-                                </div>
-                                <CardTitle className="text-xl">{instrument.name}</CardTitle>
+                    <div className="space-y-6">
+                      {isReviewingDocument && (
+                        <Card className="bg-blue-50 border-blue-200">
+                          <CardContent className="pt-6">
+                            <div className="flex gap-3">
+                              <Loader2 className="h-5 w-5 text-blue-600 shrink-0 mt-0.5 animate-spin" />
+                              <div className="space-y-1">
+                                <p className="font-semibold text-blue-900">Documento em Análise pela SIE</p>
+                                <p className="text-sm text-blue-800">O instrumento jurídico preenchido foi enviado para análise da equipe técnica da SIE. Você será notificado assim que houver um parecer ou solicitação de ajustes.</p>
                               </div>
-                              <CardDescription className="text-xs font-medium flex items-center gap-2">{legalInstrumentTypeLabel(instance.legalInstrumentVersion.type)}</CardDescription>
                             </div>
-                            <div className="flex flex-col items-end gap-2">
-                              <Badge variant={isFullyFilled ? "default" : "secondary"} className={cn("px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-xs", isFullyFilled && "bg-green-500 hover:bg-green-600 border-none text-white", status === LegalInstrumentStatus.PARTIAL && "bg-yellow-500/10 text-yellow-600 border-yellow-200 dark:border-yellow-900", status === LegalInstrumentStatus.PENDING && "bg-muted text-muted-foreground")}>
-                                {status === LegalInstrumentStatus.FILLED && "Completo"}
-                                {status === LegalInstrumentStatus.PARTIAL && "Em Progresso"}
-                                {status === LegalInstrumentStatus.PENDING && "Pendente"}
-                              </Badge>
+                          </CardContent>
+                        </Card>
+                      )}
+                      <div className="grid gap-6 lg:grid-cols-12 items-stretch">
+                        {/* Header Status Card */}
+                        <Card className="overflow-hidden border-none col-span-7 shadow-md bg-linear-to-br from-card to-muted/30">
+                          <CardHeader className="pb-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                    <Scale className="h-5 w-5" />
+                                  </div>
+                                  <CardTitle className="text-xl">{instrument.name}</CardTitle>
+                                </div>
+                                <CardDescription className="text-xs font-medium flex items-center gap-2">{legalInstrumentTypeLabel(instance.legalInstrumentVersion.type)}</CardDescription>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                <Badge variant={isFullyFilled ? "default" : "secondary"} className={cn("px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-xs", isFullyFilled && "bg-green-500 hover:bg-green-600 border-none text-white", status === LegalInstrumentStatus.PARTIAL && "bg-yellow-500/10 text-yellow-600 border-yellow-200 dark:border-yellow-900", status === LegalInstrumentStatus.PENDING && "bg-muted text-muted-foreground")}>
+                                  {status === LegalInstrumentStatus.FILLED && "Completo"}
+                                  {status === LegalInstrumentStatus.PARTIAL && "Em Progresso"}
+                                  {status === LegalInstrumentStatus.PENDING && "Pendente"}
+                                </Badge>
+                              </div>
                             </div>
-                          </div>
-                        </CardHeader>
+                          </CardHeader>
 
-                        <div className="flex px-6 flex-col sm:flex-row items-center justify-between gap-6">
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center justify-center h-12 w-12 rounded-full bg-background border shadow-sm">
-                              <CheckCircle2 className="h-6 w-6 text-primary" />
+                          <div className="flex px-6 flex-col sm:flex-row items-center justify-between gap-6">
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center justify-center h-12 w-12 rounded-full bg-background border shadow-sm">
+                                <CheckCircle2 className="h-6 w-6 text-primary" />
+                              </div>
+                              <div className="space-y-0.5">
+                                <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Progresso</h4>
+                                <p className="text-xs text-muted-foreground">{requiredTotalCount > 0 ? `${requiredFilledCount} de ${requiredTotalCount} campos obrigatórios finalizados` : "Sem campos obrigatórios específicos"}</p>
+                              </div>
                             </div>
-                            <div className="space-y-0.5">
-                              <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Progresso</h4>
-                              <p className="text-xs text-muted-foreground">{requiredTotalCount > 0 ? `${requiredFilledCount} de ${requiredTotalCount} campos obrigatórios finalizados` : "Sem campos obrigatórios específicos"}</p>
-                            </div>
+
+                            {requiredTotalCount > 0 && (
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-4xl font-black tracking-tighter text-primary">{Math.round(requiredProgress * 100)}%</span>
+                                <span className="text-xs font-bold text-muted-foreground/50 uppercase">Concluído</span>
+                              </div>
+                            )}
                           </div>
 
+                          {/* Progress bar attached to bottom of header card */}
                           {requiredTotalCount > 0 && (
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-4xl font-black tracking-tighter text-primary">{Math.round(requiredProgress * 100)}%</span>
-                              <span className="text-xs font-bold text-muted-foreground/50 uppercase">Concluído</span>
+                            <div className="h-1.5 w-full bg-muted/50">
+                              <div className={cn("h-full transition-all duration-1000 ease-out bg-primary")} style={{ width: `${Math.round(requiredProgress * 100)}%` }} />
                             </div>
                           )}
-                        </div>
+                        </Card>
 
-                        {/* Progress bar attached to bottom of header card */}
-                        {requiredTotalCount > 0 && (
-                          <div className="h-1.5 w-full bg-muted/50">
-                            <div className={cn("h-full transition-all duration-1000 ease-out bg-primary")} style={{ width: `${Math.round(requiredProgress * 100)}%` }} />
-                          </div>
-                        )}
-                      </Card>
-
-                      {/* Actions Card */}
-                      <Card className="shadow-md border-primary/10 col-span-5 overflow-hidden">
-                        <CardHeader className="bg-muted/20 pb-4">
-                          <CardTitle className="text-lg">Gerenciar</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-6">
-                          {view?.allowActions ? (
-                            <Button className={cn("w-full h-11 text-sm font-semibold transition-all shadow-md", !isFullyFilled && "shadow-primary/20")} variant={isFullyFilled ? "outline" : "default"} asChild>
-                              <Link href={`/projetos/${project.slug}/legal-instrument/fill`}>
-                                <Edit className="mr-2 h-4 w-4" /> {actionLabel}
-                              </Link>
-                            </Button>
-                          ) : (
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/50">
-                              <AlertCircle className="h-5 w-5 shrink-0" />
-                              <span className="text-sm font-medium">Visualização restrita.</span>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      <Card className="bg-muted/30 border-dashed col-span-7">
-                        <CardContent className="p-5">
-                          <p className="text-[11px] text-muted-foreground leading-relaxed flex items-start gap-2">
-                            <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
-                            <span>As alterações são salvas automaticamente. O instrumento jurídico será bloqueado permanentemente após o envio para análise técnica.</span>
-                          </p>
-                        </CardContent>
-                      </Card>
-
-                      {/* Metadata/Cronologia Card */}
-                      <Card className="shadow-sm col-span-5">
-                        <CardHeader>
-                          <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Histórico</CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex justify-between">
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Primeiro Registro</span>
-                            <div className="flex items-center gap-2 text-sm font-medium">
-                              <Calendar className="h-4 w-4 text-primary/60" />
-                              {format(new Date(instance.createdAt), "dd/MM/yyyy HH:mm")}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Última Edição</span>
-                            <div className="flex items-center gap-2 text-sm font-medium">
-                              <Calendar className="h-4 w-4 text-primary/60" />
-                              {format(new Date(instance.updatedAt), "dd/MM/yyyy HH:mm")}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <div className="col-span-7">
-                        {filledFile && (
-                          <Card className="border-green-500/20 col-span-7 bg-green-500/5 shadow-inner">
-                            <CardContent className="p-6">
-                              <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-                                <div className="p-3 rounded-xl bg-green-500/10 text-green-600">
-                                  <FileText className="h-8 w-8" />
-                                </div>
-                                <div className="flex-1 space-y-0.5 text-center sm:text-left">
-                                  <h4 className="font-bold text-green-900 dark:text-green-300">Minuta Pronta para Download</h4>
-                                  <p className="text-xs text-muted-foreground max-w-md">O documento foi gerado automaticamente com os dados preenchidos até o momento.</p>
-                                </div>
-                                <Button size="sm" className="shrink-0 bg-green-600 hover:bg-green-700 shadow-sm" asChild>
-                                  <Link href={filledFile.url} target="_blank">
-                                    <Download className="h-4 w-4 mr-2" /> Baixar PDF
-                                  </Link>
-                                </Button>
+                        {/* Actions Card */}
+                        <Card className="shadow-md border-primary/10 col-span-5 overflow-hidden">
+                          <CardHeader className="bg-muted/20 pb-4">
+                            <CardTitle className="text-lg">Gerenciar</CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-6">
+                            {view?.allowActions ? (
+                              <Button className={cn("w-full h-11 text-sm font-semibold transition-all shadow-md", !isFullyFilled && "shadow-primary/20")} variant={isFullyFilled ? "outline" : "default"} asChild>
+                                <Link href={`/projetos/${project.slug}/legal-instrument/fill`}>
+                                  <Edit className="mr-2 h-4 w-4" /> {actionLabel}
+                                </Link>
+                              </Button>
+                            ) : (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-orange-50 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/50">
+                                <AlertCircle className="h-5 w-5 shrink-0" />
+                                <span className="text-sm font-medium">Visualização restrita.</span>
                               </div>
-                            </CardContent>
-                          </Card>
-                        )}
-                      </div>
+                            )}
+                          </CardContent>
+                        </Card>
 
-                      {/* Discrete Technical Reference */}
-                      <div className="px-2 pt-2 col-span-5 space-y-1 opacity-40 hover:opacity-100 transition-opacity">
-                        <div className="flex items-center justify-between text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
-                          <span>Versão do Instrumento</span>
-                          <span className="font-bold">v{instance.legalInstrumentVersion.version}</span>
+                        <Card className="bg-muted/30 border-dashed col-span-7">
+                          <CardContent className="p-5">
+                            <p className="text-[11px] text-muted-foreground leading-relaxed flex items-start gap-2">
+                              <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
+                              <span>As alterações são salvas automaticamente. O instrumento jurídico será bloqueado permanentemente após o envio para análise técnica.</span>
+                            </p>
+                          </CardContent>
+                        </Card>
+
+                        {/* Metadata/Cronologia Card */}
+                        <Card className="shadow-sm col-span-5">
+                          <CardHeader>
+                            <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Histórico</CardTitle>
+                          </CardHeader>
+                          <CardContent className="flex justify-between">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Primeiro Registro</span>
+                              <div className="flex items-center gap-2 text-sm font-medium">
+                                <Calendar className="h-4 w-4 text-primary/60" />
+                                {format(new Date(instance.createdAt), "dd/MM/yyyy HH:mm")}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Última Edição</span>
+                              <div className="flex items-center gap-2 text-sm font-medium">
+                                <Calendar className="h-4 w-4 text-primary/60" />
+                                {format(new Date(instance.updatedAt), "dd/MM/yyyy HH:mm")}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <div className="col-span-7">
+                          {filledFile && (
+                            <Card className="border-green-500/20 col-span-7 bg-green-500/5 shadow-inner">
+                              <CardContent className="p-6">
+                                <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
+                                  <div className="p-3 rounded-xl bg-green-500/10 text-green-600">
+                                    <FileText className="h-8 w-8" />
+                                  </div>
+                                  <div className="flex-1 space-y-0.5 text-center sm:text-left">
+                                    <h4 className="font-bold text-green-900 dark:text-green-300">Minuta Pronta para Download</h4>
+                                    <p className="text-xs text-muted-foreground max-w-md">O documento foi gerado automaticamente com os dados preenchidos até o momento.</p>
+                                  </div>
+                                  <Button size="sm" className="shrink-0 bg-green-600 hover:bg-green-700 shadow-sm" asChild>
+                                    <Link href={filledFile.url} target="_blank">
+                                      <Download className="h-4 w-4 mr-2" /> Baixar PDF
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
                         </div>
-                        <div className="text-[8px] font-mono text-muted-foreground break-all text-center">ID: {instance.id}</div>
+
+                        {/* Discrete Technical Reference */}
+                        <div className="px-2 pt-2 col-span-5 space-y-1 opacity-40 hover:opacity-100 transition-opacity">
+                          <div className="flex items-center justify-between text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
+                            <span>Versão do Instrumento</span>
+                            <span className="font-bold">v{instance.legalInstrumentVersion.version}</span>
+                          </div>
+                          <div className="text-[8px] font-mono text-muted-foreground break-all text-center">ID: {instance.id}</div>
+                        </div>
                       </div>
                     </div>
                   )
                 })()}
+              </div>
+            ) : (project as any).proposedInstrumentType ? (
+              <div className="space-y-6">
+                <Card className="bg-blue-50 border-blue-200">
+                  <CardContent className="pt-6">
+                    <div className="flex gap-3">
+                      <Loader2 className="h-5 w-5 text-blue-600 shrink-0 mt-0.5 animate-spin" />
+                      <div className="space-y-1">
+                        <p className="font-semibold text-blue-900">Aguardando Classificação pela SIE</p>
+                        <p className="text-sm text-blue-800">
+                          Você já realizou a classificação preliminar (Sugestão: <strong>{legalInstrumentTypeLabel((project as any).proposedInstrumentType as any)}</strong>). Agora a equipe técnica da SIE analisará seu projeto para confirmar o instrumento jurídico adequado. O documento para preenchimento será liberado em seguida.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="overflow-hidden border-dashed">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Classificação Realizada</CardTitle>
+                    <CardDescription>Resumo das respostas enviadas para análise</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="bg-muted/30 p-4 rounded-lg space-y-2">
+                      <p className="text-sm text-muted-foreground italic">O histórico de respostas do Wizard será exibido aqui em breve (Fase 3).</p>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed rounded-xl bg-muted/5 transition-colors hover:bg-muted/10">

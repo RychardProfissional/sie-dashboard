@@ -18,7 +18,7 @@ interface ProjectContextType {
   loading: boolean
   dependences: ProjectDependences
   view: ProjectViewerContext | null
-  refetch: () => Promise<void>
+  refetch: (showLoading?: boolean) => Promise<void>
   updateWorkPlan: (workPlan: ProjectData["workPlan"] | null) => void
   updateLegalInstrument: (instance: ProjectData["legalInstrumentInstance"] | null) => void
 }
@@ -36,9 +36,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   })
   const [view, setView] = useState<ProjectViewerContext | null>(null)
 
-  const fetchProject = async () => {
+  const fetchProject = async (showLoading = true) => {
     try {
-      setLoading(true)
+      if (showLoading) setLoading(true)
       const [data, viewer] = await Promise.all([getProjectBySlug(params.slug), getProjectViewerContext(params.slug)])
       if (!data) {
         router.push("/404")
@@ -55,7 +55,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error("Failed to fetch project:", error)
       if (axios.isAxiosError(error) && error.response?.status === 404) router.push("/404")
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
     }
   }
 
@@ -81,11 +81,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  return (
-    <ProjectContext.Provider value={{ project, dependences, loading, view, refetch: fetchProject, updateWorkPlan, updateLegalInstrument }}>
-      {children}
-    </ProjectContext.Provider>
-  )
+  return <ProjectContext.Provider value={{ project, dependences, loading, view, refetch: fetchProject, updateWorkPlan, updateLegalInstrument }}>{children}</ProjectContext.Provider>
 }
 
 export function useProject() {
