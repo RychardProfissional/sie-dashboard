@@ -28,6 +28,7 @@ import { legalInstrumentTypeLabel } from "@/lib/utils/legal-instrument"
 import { ProjectStatusBadge } from "@/components/projects/status-badge"
 import { ExportPdfButton } from "@/components/projects/export-pdf-button"
 import { ScheduleManager } from "@/components/projects/schedule/schedule-manager"
+import { ProjectStats } from "@/components/projects/project-stats"
 
 type MissingDependency = {
   id: string
@@ -55,7 +56,8 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 
 export default function ProjectDetailsPage() {
   const router = useRouter()
-  const { project, dependences, loading, view } = useProject()
+  const { project: rawProject, dependences, loading, view } = useProject()
+  const project = rawProject as any
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -76,21 +78,18 @@ export default function ProjectDetailsPage() {
 
   if (!project) return null
 
-  const workPlan = dependences["work-plan"]
   const legalInstrumentInstance: ProjectLegalInstrumentInstance | null = dependences["legal-instrument"] ?? null
 
-  const specificObjectives: any = workPlan?.specificObjectives
-  console.log("specificObjectives: ", specificObjectives)
-  console.log("workPlan: ", workPlan?.specificObjectives)
+  const specificObjectives: any = project.specificObjectives
 
   // Calculate dependencies
   const missingDependencies: MissingDependency[] = []
 
-  const hasWorkPlan = !!workPlan
+  const hasWorkPlan = !!project.methodology
   const hasLegalInstrument = !!legalInstrumentInstance || (!!(project as any).proposedInstrumentType && !!(project as any).classificationAnswers)
   const hasPendingInstrument = !!legalInstrumentInstance && (legalInstrumentInstance.status || LegalInstrumentStatus.PENDING) !== LegalInstrumentStatus.FILLED
-  const hasTeam = !!workPlan && Array.isArray(workPlan.team) && workPlan.team.length > 0
-  const hasSchedule = !!project.schedule && (project.schedule.milestones.length > 0 || project.schedule.tasks.length > 0)
+  const hasTeam = Array.isArray(project.team) && project.team.length > 0
+  const hasSchedule = !!project.workPlanSchedule && project.workPlanSchedule.length > 0
 
   const canSubmit = view?.allowActions && hasWorkPlan && hasLegalInstrument && hasTeam && hasSchedule && (project.status === ProjectStatus.DRAFT || (project.status as any) === "RETURNED")
 
@@ -119,7 +118,7 @@ export default function ProjectDetailsPage() {
   }
 
   // 1. Work Plan Dependency
-  if (!workPlan) {
+  if (!hasWorkPlan) {
     missingDependencies.push({
       id: "work-plan",
       label: "Plano de Trabalho",
@@ -128,18 +127,16 @@ export default function ProjectDetailsPage() {
       action: "Criar Plano",
       icon: FileText,
     })
-  } else {
-    // 1.1 Team Dependency (linked to work plan)
-    if (!hasTeam) {
-      missingDependencies.push({
-        id: "team",
-        label: "Equipe Executora",
-        description: "É necessário definir os membros da equipe que atuarão no projeto.",
-        link: `/projetos/${project.slug}/work-plan`,
-        action: "Gerenciar Equipe",
-        icon: UserAvatar as any,
-      })
-    }
+  } else if (!hasTeam) {
+    // 1.1 Team Dependency
+    missingDependencies.push({
+      id: "team",
+      label: "Equipe Executora",
+      description: "É necessário definir os membros da equipe que atuarão no projeto.",
+      link: `/projetos/${project.slug}/work-plan`,
+      action: "Gerenciar Equipe",
+      icon: UserAvatar as any,
+    })
   }
 
   // 1.2 Schedule Dependency
@@ -331,43 +328,22 @@ export default function ProjectDetailsPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-8 animate-in fade-in-50 duration-300">
-            <div className="grid gap-8 md:grid-cols-3">
-              {/* Main Info */}
-              <div className={cn("space-y-8", missingDependencies.length > 0 || (view?.allowActions && project.status === ProjectStatus.DRAFT) ? "md:col-span-2" : "md:col-span-3")}>
-                <section className="space-y-3">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-primary" /> Objetivos
-                  </h3>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.objectives || "Nenhum objetivo definido."}</div>
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-lg font-semibold">Justificativa</h3>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.justification || "Nenhuma justificativa definida."}</div>
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-lg font-semibold">Abrangência</h3>
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.scope || "Nenhuma abrangência definida."}</div>
-                </section>
-              </div>
-
-              {/* Sidebar */}
-              {(missingDependencies.length > 0 || (view?.allowActions && project.status === ProjectStatus.DRAFT)) && (
-                <div className="space-y-4">
-                  {missingDependencies.length > 0 && (
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 font-medium text-orange-600 dark:text-orange-400">
-                        <AlertCircle className="h-5 w-5" />
-                        Pendências do Projeto
-                      </div>
-                      {missingDependencies.map((dep) => (
-                        <DependencyCard key={dep.id} title={dep.label} description={dep.description} icon={dep.icon} actionLabel={dep.action} actionLink={dep.link} variant="warning" readOnly={!view?.allowActions} />
-                      ))}
-                    </div>
-                  )}
-
-                  {!missingDependencies.length && view?.allowActions && project.status === ProjectStatus.DRAFT && (
+            {/* 1. Pendências (Top Banner Style) */}
+            {(missingDependencies.length > 0 || (view?.allowActions && project.status === ProjectStatus.DRAFT)) && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 font-medium text-lg text-primary">
+                  <AlertCircle className="h-5 w-5 text-orange-500" />
+                  Próximos Passos
+                </div>
+                {missingDependencies.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {missingDependencies.map((dep) => (
+                      <DependencyCard key={dep.id} title={dep.label} description={dep.description} icon={dep.icon} actionLabel={dep.action} actionLink={dep.link} variant="warning" readOnly={!view?.allowActions} />
+                    ))}
+                  </div>
+                ) : (
+                  view?.allowActions &&
+                  project.status === ProjectStatus.DRAFT && (
                     <Card className="border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/20">
                       <CardHeader className="pb-3">
                         <div className="flex items-start gap-3">
@@ -379,9 +355,81 @@ export default function ProjectDetailsPage() {
                         </div>
                       </CardHeader>
                     </Card>
-                  )}
+                  )
+                )}
+              </div>
+            )}
+
+            {/* 2. Stats */}
+            <section className="space-y-3">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" /> Métricas e Indicadores
+              </h3>
+              <ProjectStats project={project} />
+            </section>
+
+            {/* 3. Main Content (Vertical Flow) */}
+            <div className="grid gap-8 md:grid-cols-3">
+              <div className="md:col-span-2 space-y-8">
+                <section className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">Resumo Executivo</h3>
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.objectives || "Nenhum objetivo definido."}</div>
+                </section>
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  <section className="space-y-3">
+                    <h3 className="text-lg font-semibold">Justificativa</h3>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.justification || "Nenhuma justificativa definida."}</div>
+                  </section>
+
+                  <section className="space-y-3">
+                    <h3 className="text-lg font-semibold">Abrangência</h3>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.scope || "Nenhuma abrangência definida."}</div>
+                  </section>
                 </div>
-              )}
+
+                {project.expectedResults && (
+                  <section className="space-y-3">
+                    <h3 className="text-lg font-semibold">Resultados Esperados</h3>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">{project.expectedResults}</div>
+                  </section>
+                )}
+              </div>
+
+              {/* 4. Recent Activity (Sidebar) */}
+              <div className="md:col-span-1 space-y-6">
+                <Card className="h-fit">
+                  <CardHeader>
+                    <CardTitle className="text-base">Atividade Recente</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {project.audits && project.audits.length > 0 ? (
+                      project.audits.slice(0, 5).map((a: any) => (
+                        <div key={a.id} className="flex gap-3 text-sm border-l-2 pl-3 py-1 border-muted relative">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium text-xs">
+                              {a.action === "SUBMITTED" && "Enviado"}
+                              {a.action === "APPROVED" && "Aprovado"}
+                              {a.action === "REJECTED" && "Rejeitado"}
+                              {a.action === "RETURNED" && "Retornado"}
+                              {a.action === "REVIEW_STARTED" && "Em Análise"}
+                              {a.action === "CREATED" && "Criado"}
+                              {a.action === "UPDATED" && "Atualizado"}
+                              {!["SUBMITTED", "APPROVED", "REJECTED", "RETURNED", "REVIEW_STARTED", "CREATED", "UPDATED"].includes(a.action) && a.action}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">{format(new Date(a.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Nenhuma atividade recente.</span>
+                    )}
+                    <Button variant="ghost" className="w-full text-xs" size="sm" asChild>
+                      <Link href={`?tab=history`}>Ver Histórico Completo</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </TabsContent>
 
@@ -396,7 +444,7 @@ export default function ProjectDetailsPage() {
                   <div className="text-sm text-muted-foreground">Nenhuma ação registrada ainda.</div>
                 ) : (
                   <div className="space-y-3">
-                    {project.audits.map((a) => {
+                    {project.audits.map((a: any) => {
                       const details = isPlainObject(a.changeDetails) ? (a.changeDetails as any) : {}
                       const reason = typeof details.reason === "string" ? details.reason : undefined
                       const opinion = typeof details.opinion === "string" ? details.opinion : undefined
@@ -430,16 +478,13 @@ export default function ProjectDetailsPage() {
           </TabsContent>
 
           <TabsContent value="workplan" className="animate-in fade-in-50 duration-300">
-            {workPlan ? (
+            {hasWorkPlan ? (
               <div className="space-y-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <div className="space-y-1">
                       <CardTitle>Plano de Trabalho</CardTitle>
-                      <CardDescription>
-                        Criado em {format(new Date(workPlan.createdAt), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                        {workPlan.updatedAt ? <> • Atualizado em {format(new Date(workPlan.updatedAt), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</> : null}
-                      </CardDescription>
+                      <CardDescription>Consolidação técnica do projeto.</CardDescription>
                     </div>
                     {view?.allowActions && (
                       <Button variant="outline" asChild>
@@ -461,7 +506,7 @@ export default function ProjectDetailsPage() {
                           <div className="p-4 space-y-4">
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Objetivo Geral</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.generalObjective}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.objectives}</p>
                             </div>
 
                             <div className="space-y-2">
@@ -490,30 +535,30 @@ export default function ProjectDetailsPage() {
                               <div className="text-xs font-medium text-muted-foreground">Vigência</div>
                               <div className="text-sm">
                                 <span className="text-muted-foreground">
-                                  {workPlan.validityStart ? format(new Date(workPlan.validityStart), "dd/MM/yyyy") : "Início não definido"}
+                                  {project.validityStart ? format(new Date(project.validityStart), "dd/MM/yyyy") : "Início não definido"}
                                   {" - "}
-                                  {workPlan.validityEnd ? format(new Date(workPlan.validityEnd), "dd/MM/yyyy") : "Fim não definido"}
+                                  {project.validityEnd ? format(new Date(project.validityEnd), "dd/MM/yyyy") : "Fim não definido"}
                                 </span>
                               </div>
                             </div>
 
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Objeto</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.object || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.title || "Não informado."}</p>
                             </div>
 
                             <div className="grid gap-3 sm:grid-cols-2">
                               <div className="space-y-1">
                                 <div className="text-xs font-medium text-muted-foreground">Unidade Responsável</div>
-                                <div className="text-sm text-muted-foreground">{workPlan.responsibleUnit || "Não informado."}</div>
+                                <div className="text-sm text-muted-foreground">{project.responsibleUnit || "Não informado."}</div>
                               </div>
                               <div className="space-y-1">
                                 <div className="text-xs font-medium text-muted-foreground">Gestor da ICT</div>
-                                <div className="text-sm text-muted-foreground">{workPlan.ictManager || "Não informado."}</div>
+                                <div className="text-sm text-muted-foreground">{project.ictManager || "Não informado."}</div>
                               </div>
                               <div className="space-y-1 sm:col-span-2">
                                 <div className="text-xs font-medium text-muted-foreground">Gestor do Parceiro</div>
-                                <div className="text-sm text-muted-foreground">{workPlan.partnerManager || "Não informado."}</div>
+                                <div className="text-sm text-muted-foreground">{project.partnerManager || "Não informado."}</div>
                               </div>
                             </div>
                           </div>
@@ -528,15 +573,15 @@ export default function ProjectDetailsPage() {
                           <div className="p-4 space-y-4">
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Diagnóstico</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.diagnosis || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.diagnosis || "Não informado."}</p>
                             </div>
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Justificativa</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.planJustification || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.justification || "Não informado."}</p>
                             </div>
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Abrangência</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.planScope || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.scope || "Não informado."}</p>
                             </div>
                           </div>
                         </div>
@@ -548,15 +593,15 @@ export default function ProjectDetailsPage() {
                           <div className="p-4 space-y-4">
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Metodologia</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.methodology || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.methodology || "Não informado."}</p>
                             </div>
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Resultados Esperados</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.expectedResults || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.expectedResults || "Não informado."}</p>
                             </div>
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-muted-foreground">Monitoramento e Avaliação</div>
-                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.monitoring || "Não informado."}</p>
+                              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.monitoring || "Não informado."}</p>
                             </div>
                           </div>
                         </div>
@@ -599,9 +644,9 @@ export default function ProjectDetailsPage() {
                 )}
               </CardHeader>
               <CardContent>
-                {workPlan?.team && workPlan.team.length > 0 ? (
+                {project.team && project.team.length > 0 ? (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {workPlan.team.map((member: any) => (
+                    {project.team.map((member: any) => (
                       <div key={member.id} className="p-4 rounded-lg border bg-muted/5 flex items-start gap-4">
                         <UserAvatar
                           size="sm"

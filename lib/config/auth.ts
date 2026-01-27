@@ -188,12 +188,25 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
-      if (session.user && token.uid) {
-        session.user.id = token.uid
-        session.user.firstAccess = token.firstAccess as boolean
-        session.user.color = token.color || undefined
-        session.user.name = token.name
-        session.user.image = token.image
+      if (token.uid) {
+        const user = await prisma.user.findUnique({
+          where: { id: token.uid },
+          select: { id: true, name: true, email: true, imageFile: { select: { url: true } }, color: true, firstAccess: true },
+        })
+
+        if (!user) {
+          // User deleted from DB but token is valid -> Invalidate session user
+          session.user = undefined as any
+          return session
+        }
+
+        if (session.user) {
+          session.user.id = user.id
+          session.user.firstAccess = user.firstAccess
+          session.user.color = user.color || undefined
+          session.user.name = user.name || undefined
+          session.user.image = user.imageFile?.url || undefined
+        }
       }
       return session
     },

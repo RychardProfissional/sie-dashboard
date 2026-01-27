@@ -9,7 +9,6 @@ import type { GetProjectBySlugResponse, ProjectViewerContext } from "@/actions/p
 type ProjectData = NonNullable<GetProjectBySlugResponse>
 
 export type ProjectDependences = {
-  "work-plan": ProjectData["workPlan"] | null
   "legal-instrument": ProjectData["legalInstrumentInstance"] | null
 }
 
@@ -19,7 +18,7 @@ interface ProjectContextType {
   dependences: ProjectDependences
   view: ProjectViewerContext | null
   refetch: (showLoading?: boolean) => Promise<void>
-  updateWorkPlan: (workPlan: ProjectData["workPlan"] | null) => void
+  updateWorkPlan: (project: ProjectData | null) => void
   updateLegalInstrument: (instance: ProjectData["legalInstrumentInstance"] | null) => void
 }
 
@@ -31,7 +30,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [project, setProject] = useState<GetProjectBySlugResponse>(null)
   const [loading, setLoading] = useState(true)
   const [dependences, setDependences] = useState<ProjectDependences>({
-    "work-plan": null,
     "legal-instrument": null,
   })
   const [view, setView] = useState<ProjectViewerContext | null>(null)
@@ -48,7 +46,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setProject(data)
       setView(viewer)
       setDependences({
-        "work-plan": data?.workPlan || null,
         "legal-instrument": data?.legalInstrumentInstance || null,
       })
     } catch (error: unknown) {
@@ -65,12 +62,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [params.slug, router])
 
-  const updateWorkPlan = (workPlan: ProjectData["workPlan"] | null) => {
-    setDependences((prev) => ({ ...prev, "work-plan": workPlan }))
-    setProject((prev) => {
-      if (!prev) return prev
-      return { ...prev, workPlan }
-    })
+  const updateWorkPlan = (newProject: ProjectData | null) => {
+    setProject(newProject)
   }
 
   const updateLegalInstrument = (instance: ProjectData["legalInstrumentInstance"] | null) => {

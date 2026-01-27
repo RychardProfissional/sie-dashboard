@@ -66,33 +66,32 @@ export function ExportPdfButton({ project, variant = "outline", size = "sm", cla
       })
 
       // 3. TEAM MEMBERS
-      if (project.workPlan?.team && project.workPlan.team.length > 0) {
+      if (project.team && project.team.length > 0) {
         autoTable(doc, {
           startY: (doc as any).lastAutoTable.finalY + 10,
           head: [["Equipe Executora", "Papel/Função"]],
-          body: project.workPlan.team.map((m: any) => [m.name, m.role || "-"]),
+          body: project.team.map((m: any) => [m.name, m.role || "-"]),
           theme: "striped",
           headStyles: { fillColor: [41, 128, 185], textColor: 255 },
         })
       }
 
       // 4. WORK PLAN DETAILS
-      if (project.workPlan) {
+      if (project.methodology) {
         doc.addPage()
         doc.setFontSize(14)
         doc.text("Plano de Trabalho Técnico", 14, 20)
 
-        const wp = project.workPlan
-        const objectives = Array.isArray(wp.specificObjectives) ? wp.specificObjectives.map((o: any) => `- ${typeof o === "string" ? o : o.value}`).join("\n") : "-"
+        const objectives = Array.isArray(project.specificObjectives) ? project.specificObjectives.map((o: any) => `- ${typeof o === "string" ? o : o.value}`).join("\n") : "-"
 
         autoTable(doc, {
           startY: 25,
           body: [
-            ["Objetivo Geral", wp.generalObjective || "-"],
+            ["Objetivo Geral", project.objectives || "-"],
             ["Metas Específicas", objectives],
-            ["Metodologia", wp.methodology || "-"],
-            ["Resultados Esperados", wp.expectedResults || "-"],
-            ["Vigência", `${wp.validityStart ? format(new Date(wp.validityStart), "dd/MM/yyyy") : "?"} até ${wp.validityEnd ? format(new Date(wp.validityEnd), "dd/MM/yyyy") : "?"}`],
+            ["Metodologia", project.methodology || "-"],
+            ["Resultados Esperados", project.expectedResults || "-"],
+            ["Vigência", `${project.validityStart ? format(new Date(project.validityStart), "dd/MM/yyyy") : "?"} até ${project.validityEnd ? format(new Date(project.validityEnd), "dd/MM/yyyy") : "?"}`],
           ],
           theme: "grid",
           columnStyles: { 0: { cellWidth: 45, fontStyle: "bold" } },
@@ -148,7 +147,7 @@ export function ExportPdfButton({ project, variant = "outline", size = "sm", cla
       }
 
       // 6. FORMAL SCHEDULE (ScheduleItem)
-      if (project.workPlan?.schedule && project.workPlan.schedule.length > 0) {
+      if (project.workPlanSchedule && project.workPlanSchedule.length > 0) {
         doc.addPage()
         doc.setFontSize(14)
         doc.text("Metas e Ações Formais", 14, 20)
@@ -156,7 +155,7 @@ export function ExportPdfButton({ project, variant = "outline", size = "sm", cla
         autoTable(doc, {
           startY: 30,
           head: [["Eixo/Meta", "Ação/Etapa", "Responsável", "Período"]],
-          body: project.workPlan.schedule.map((s: any) => [s.axisGoal, s.actionStep, s.responsible, `${format(new Date(s.startDate), "dd/MM/yy")} - ${format(new Date(s.endDate), "dd/MM/yy")}`]),
+          body: project.workPlanSchedule.map((s: any) => [s.axisGoal, s.actionStep, s.responsible, `${format(new Date(s.startDate), "dd/MM/yy")} - ${format(new Date(s.endDate), "dd/MM/yy")}`]),
           theme: "grid",
           headStyles: { fillColor: [41, 128, 185] },
         })

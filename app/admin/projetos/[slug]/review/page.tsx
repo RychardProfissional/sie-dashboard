@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { legalInstrumentTypeLabel } from "@/lib/utils/legal-instrument"
-import { Calendar, CheckCircle2, Loader2, AlertCircle, FileText, Scale, Download, History } from "lucide-react"
+import { Calendar, CheckCircle2, Loader2, AlertCircle, FileText, Scale, Download, History, Edit } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { cn } from "@/lib/utils"
@@ -24,6 +24,7 @@ import { ProjectStatusBadge } from "@/components/projects/status-badge"
 import { Separator } from "@/components/ui/separator"
 import { ScheduleManager } from "@/components/projects/schedule/schedule-manager"
 import { ExportPdfButton } from "@/components/projects/export-pdf-button"
+import { ExportSeiPackageButton } from "@/components/projects/export-sei-package-button"
 
 import { ReturnProjectDialog } from "@/components/admin/projects/review/return-project-dialog"
 import { ApproveProjectDialog } from "@/components/admin/projects/review/approve-project-dialog"
@@ -45,12 +46,14 @@ export default function ProjectReviewPage() {
   const params = useParams()
   const router = useRouter()
   const slug = params.slug as string
-  const { project, loading, refetch } = useProject()
+  const { project: rawProject, loading, refetch } = useProject()
+  const project = rawProject as any
   const { data: session } = useSession()
 
   const [isStartingReview, setIsStartingReview] = useState(false)
   const [selectedInstrumentType, setSelectedInstrumentType] = useState<LegalInstrumentType | "">("")
   const [isClassifying, setIsClassifying] = useState(false)
+  const [isReclassifying, setIsReclassifying] = useState(false)
 
   if (loading) {
     return (
@@ -63,7 +66,7 @@ export default function ProjectReviewPage() {
 
   if (!project) return null
 
-  const workPlan = project.workPlan
+  const hasWorkPlan = !!project.methodology
   const legalInstruments = project.legalInstrumentInstance ? [project.legalInstrumentInstance] : []
 
   const handleStartReview = async () => {
@@ -158,6 +161,7 @@ export default function ProjectReviewPage() {
                   <ApproveProjectDialog slug={slug} />
                 </>
               )}
+              {project.status === ProjectStatus.APPROVED && <ExportSeiPackageButton project={project} />}
               <ExportPdfButton project={project} />
             </div>
           </div>
@@ -249,11 +253,11 @@ export default function ProjectReviewPage() {
                     </div>
                   </div>
 
-                  <div className={cn("flex items-start gap-3", workPlan ? "opacity-100" : "opacity-50")}>
-                    {workPlan ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />}
+                  <div className={cn("flex items-start gap-3", hasWorkPlan ? "opacity-100" : "opacity-50")}>
+                    {hasWorkPlan ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />}
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Plano de Trabalho</p>
-                      <p className="text-xs text-muted-foreground">{workPlan ? "Criado" : "Não encontrado"}</p>
+                      <p className="text-xs text-muted-foreground">{hasWorkPlan ? "Criado" : "Não encontrado"}</p>
                     </div>
                   </div>
 
@@ -265,11 +269,11 @@ export default function ProjectReviewPage() {
                     </div>
                   </div>
 
-                  <div className={cn("flex items-start gap-3", workPlan?.team && workPlan.team.length > 0 ? "opacity-100" : "opacity-50")}>
-                    {workPlan?.team && workPlan.team.length > 0 ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />}
+                  <div className={cn("flex items-start gap-3", project.team && project.team.length > 0 ? "opacity-100" : "opacity-50")}>
+                    {project.team && project.team.length > 0 ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />}
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Equipe Executora</p>
-                      <p className="text-xs text-muted-foreground">{workPlan?.team && workPlan.team.length > 0 ? "Definida" : "Não encontrada"}</p>
+                      <p className="text-xs text-muted-foreground">{project.team && project.team.length > 0 ? "Definida" : "Não encontrada"}</p>
                     </div>
                   </div>
 
@@ -277,7 +281,7 @@ export default function ProjectReviewPage() {
                     {project.schedule && (project.schedule.milestones.length > 0 || project.schedule.tasks.length > 0) ? <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0 mt-0.5" /> : <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />}
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Cronograma Técnico</p>
-                      <p className="text-xs text-muted-foreground">{project.schedule && (project.schedule.milestones.length > 0 || project.schedule.tasks.length > 0) ? "Definido" : "Não encontrado"}</p>
+                      <p className="text-xs text-muted-foreground">{project.workPlanSchedule && project.workPlanSchedule.length > 0 ? "Definido" : "Não encontrado"}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -287,7 +291,7 @@ export default function ProjectReviewPage() {
         </TabsContent>
         {/* Workplan Tab */}
         <TabsContent value="workplan" className="space-y-6">
-          {workPlan ? (
+          {hasWorkPlan ? (
             <div className="space-y-8">
               {/* General Info */}
               <div className="grid gap-6 md:grid-cols-2">
@@ -298,19 +302,19 @@ export default function ProjectReviewPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-1">
                       <h4 className="text-xs font-semibold uppercase text-muted-foreground">Objetivo Geral</h4>
-                      <p className="text-sm">{workPlan.generalObjective || "N/A"}</p>
+                      <p className="text-sm">{project.objectives || "N/A"}</p>
                     </div>
 
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Vigência</div>
                       <div className="text-sm">
-                        {workPlan.validityStart ? format(new Date(workPlan.validityStart), "dd/MM/yyyy") : "N/A"} - {workPlan.validityEnd ? format(new Date(workPlan.validityEnd), "dd/MM/yyyy") : "N/A"}
+                        {project.validityStart ? format(new Date(project.validityStart), "dd/MM/yyyy") : "N/A"} - {project.validityEnd ? format(new Date(project.validityEnd), "dd/MM/yyyy") : "N/A"}
                       </div>
                     </div>
 
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Objeto do Plano</div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.object || "Não informado."}</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.title || "Não informado."}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -322,15 +326,15 @@ export default function ProjectReviewPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Unidade Responsável</div>
-                      <p className="text-sm">{workPlan.responsibleUnit || "N/A"}</p>
+                      <p className="text-sm">{project.responsibleUnit || "N/A"}</p>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Gestor da ICT</div>
-                      <p className="text-sm">{workPlan.ictManager || "N/A"}</p>
+                      <p className="text-sm">{project.ictManager || "N/A"}</p>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Gestor do Parceiro</div>
-                      <p className="text-sm">{workPlan.partnerManager || "N/A"}</p>
+                      <p className="text-sm">{project.partnerManager || "N/A"}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -345,15 +349,15 @@ export default function ProjectReviewPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Diagnóstico Técnico</div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.diagnosis || "Não informado."}</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.diagnosis || "Não informado."}</p>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Justificativa do Plano</div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.planJustification || "Não informado."}</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.justification || "Não informado."}</p>
                     </div>
                     <div className="space-y-1">
                       <div className="text-xs font-semibold uppercase text-muted-foreground">Abrangência do Plano</div>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workPlan.planScope || "Não informado."}</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.scope || "Não informado."}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -365,15 +369,15 @@ export default function ProjectReviewPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-1">
                       <h4 className="text-xs font-semibold uppercase text-muted-foreground">Metodologia</h4>
-                      <p className="text-sm">{workPlan.methodology || "N/A"}</p>
+                      <p className="text-sm">{project.methodology || "N/A"}</p>
                     </div>
                     <div className="space-y-1">
                       <h4 className="text-xs font-semibold uppercase text-muted-foreground">Monitoramento</h4>
-                      <p className="text-sm">{workPlan.monitoring || "N/A"}</p>
+                      <p className="text-sm">{project.monitoring || "N/A"}</p>
                     </div>
                     <div className="space-y-1">
                       <h4 className="text-xs font-semibold uppercase text-muted-foreground">Resultados Esperados</h4>
-                      <p className="text-sm">{workPlan.expectedResults || "N/A"}</p>
+                      <p className="text-sm">{project.expectedResults || "N/A"}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -386,9 +390,9 @@ export default function ProjectReviewPage() {
                     <CardTitle className="text-base">Metas Específicas</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {Array.isArray(workPlan.specificObjectives) && workPlan.specificObjectives.length > 0 ? (
+                    {Array.isArray(project.specificObjectives) && project.specificObjectives.length > 0 ? (
                       <ul className="list-disc list-inside space-y-2 text-sm">
-                        {(workPlan.specificObjectives as (string | { value: string })[]).map((obj, i) => (
+                        {(project.specificObjectives as (string | { value: string })[]).map((obj, i) => (
                           <li key={i} className="text-muted-foreground">
                             {typeof obj === "string" ? obj : obj.value}
                           </li>
@@ -405,11 +409,10 @@ export default function ProjectReviewPage() {
                     <CardTitle className="text-base">Parceiros Envolvidos</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {/* @ts-ignore */}
-                    {workPlan.participants && workPlan.participants.length > 0 ? (
+                    {project.participants && project.participants.length > 0 ? (
                       <div className="space-y-4">
                         {/* @ts-ignore */}
-                        {workPlan.participants.map((part: any) => (
+                        {project.participants.map((part: any) => (
                           <div key={part.id} className="flex flex-col space-y-1 pb-3 border-b last:border-0 last:pb-0">
                             <p className="font-medium text-sm">{part.entityOrg}</p>
                             <div className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -431,7 +434,7 @@ export default function ProjectReviewPage() {
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-8">
                 <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-muted-foreground">Nenhum plano de trabalho foi criado</p>
+                <p className="text-muted-foreground">O projeto não possui informações técnicas suficientes para exibição do plano.</p>
               </CardContent>
             </Card>
           )}
@@ -444,9 +447,9 @@ export default function ProjectReviewPage() {
               <CardDescription>Membros envolvidos na execução técnica do projeto.</CardDescription>
             </CardHeader>
             <CardContent>
-              {workPlan?.team && workPlan.team.length > 0 ? (
+              {project.team && project.team.length > 0 ? (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {workPlan.team.map((member: any) => (
+                  {project.team.map((member: any) => (
                     <div key={member.id} className="p-4 rounded-lg border bg-muted/5 flex items-start gap-4">
                       <UserAvatar
                         size="sm"
@@ -502,12 +505,49 @@ export default function ProjectReviewPage() {
                             <CardDescription className="text-xs font-medium flex items-center gap-2">{legalInstrumentTypeLabel(li.legalInstrumentVersion.type)}</CardDescription>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <Badge variant="secondary" className={cn("px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-xs", li.status === "FILLED" && "bg-green-500 hover:bg-green-600 border-none text-white", li.status === "PARTIAL" && "bg-yellow-500/10 text-yellow-600 border-yellow-200 dark:border-yellow-900", li.status === "PENDING" && "bg-muted text-muted-foreground")}>
-                              {li.status === "FILLED" ? "Completo" : li.status === "PARTIAL" ? "Em Progresso" : "Pendente"}
-                            </Badge>
+                            <div className="flex gap-2">
+                              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-blue-600 hover:text-blue-700 uppercase" onClick={() => setIsReclassifying(!isReclassifying)}>
+                                <Edit className="mr-1 h-3 w-3" /> Alterar
+                              </Button>
+                              <Badge variant="secondary" className={cn("px-3 py-1 text-[10px] font-bold uppercase tracking-wider shadow-xs", li.status === "FILLED" && "bg-green-500 hover:bg-green-600 border-none text-white", li.status === "PARTIAL" && "bg-yellow-500/10 text-yellow-600 border-yellow-200 dark:border-yellow-900", li.status === "PENDING" && "bg-muted text-muted-foreground")}>
+                                {li.status === "FILLED" ? "Completo" : li.status === "PARTIAL" ? "Em Progresso" : "Pendente"}
+                              </Badge>
+                            </div>
                           </div>
                         </div>
                       </CardHeader>
+
+                      {isReclassifying && (
+                        <div className="px-6 pb-6 animate-in fade-in slide-in-from-top-2">
+                          <Card className="bg-blue-50/50 border-blue-200">
+                            <CardContent className="p-4 space-y-4">
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Nova Classificação</p>
+                                <div className="flex gap-2">
+                                  <select
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={selectedInstrumentType}
+                                    onChange={(e) => setSelectedInstrumentType(e.target.value as LegalInstrumentType)}
+                                  >
+                                    <option value="">Selecione um novo instrumento...</option>
+                                    {Object.values(LegalInstrumentType).map((type) => (
+                                      <option key={type} value={type}>
+                                        {legalInstrumentTypeLabel(type)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <Button className="shrink-0" disabled={!selectedInstrumentType || isClassifying} onClick={handleClassify}>
+                                    {isClassifying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar Troca"}
+                                  </Button>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">
+                                  <span className="font-bold text-red-600">Atenção:</span> A troca do instrumento resultará na perda do preenchimento atual. Um novo formulário em branco será gerado para o proponente.
+                                </p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      )}
 
                       <div className="px-6 pb-6">
                         <div className="flex items-center gap-4 p-4 rounded-lg bg-background/50 border">

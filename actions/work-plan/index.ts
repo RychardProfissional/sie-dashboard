@@ -5,11 +5,14 @@ import { type WorkPlanFormData } from "@/lib/schemas/work-plan"
 import { ProjectStatus } from "@prisma/client"
 import { workPlanValidator, GetWorkPlanResponse, UpsertWorkPlanResponse } from "./types"
 import { revalidatePath } from "next/cache"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/config/auth"
+import { logProjectAction } from "@/lib/services/audit"
 
 export async function getWorkPlan(projectId: string): Promise<GetWorkPlanResponse | null> {
   try {
-    const workPlan = await prisma.workPlan.findUnique({
-      where: { projectId },
+    const workPlan = await prisma.project.findUnique({
+      where: { id: projectId },
       ...workPlanValidator,
     })
 
@@ -32,8 +35,12 @@ export async function getWorkPlan(projectId: string): Promise<GetWorkPlanRespons
 
     return {
       ...workPlan,
+      object: workPlan.title,
+      generalObjective: workPlan.objectives,
+      planScope: workPlan.scope,
+      planJustification: workPlan.justification,
       specificObjectives,
-    }
+    } as any
   } catch (error) {
     console.error("Error fetching work plan:", error)
     throw new Error("Failed to fetch work plan")
@@ -51,24 +58,44 @@ export async function upsertWorkPlan(projectId: string, data: WorkPlanFormData):
       return { success: false, error: "Project not found" }
     }
 
-    if (project.status !== ProjectStatus.DRAFT && project.status !== (ProjectStatus as any).RETURNED) {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return { success: false, error: "Unauthorized" }
+    }
+
+    if (project.status !== ProjectStatus.DRAFT && project.status !== ProjectStatus.RETURNED) {
       return { success: false, error: "Project is locked for editing" }
     }
 
-    const workPlan = await prisma.workPlan.upsert({
-      where: { projectId },
-      create: {
-        projectId,
-        ...data,
-        specificObjectives: data.specificObjectives,
-      },
-      update: {
-        ...data,
-        specificObjectives: data.specificObjectives,
+    const { object, generalObjective, planScope, planJustification, ...rest } = data
+
+    const workPlan = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        ...rest,
+        title: object || undefined,
+        objectives: generalObjective,
+        scope: planScope,
+        justification: planJustification,
+        specificObjectives: data.specificObjectives as any,
       },
       ...workPlanValidator,
     })
-    return { success: true, data: workPlan }
+
+    // Log audit
+    try {
+      await logProjectAction(projectId, "EDITED", session.user.id, {
+        section: "TECHNICAL_PLAN",
+      })
+    } catch (e) {
+      console.error("log upsertWorkPlan error", e)
+    }
+
+    revalidatePath(`/projetos/${projectId}`)
+    revalidatePath("/projetos", "page")
+    revalidatePath(`/admin/projetos`, "page")
+
+    return { success: true, data: workPlan as any }
   } catch (error) {
     console.error("Error upserting work plan:", error)
     return { success: false, error: "Failed to save work plan" }

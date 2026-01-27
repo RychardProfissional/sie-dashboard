@@ -75,8 +75,9 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => {
-              const hasWorkPlan = !!project.workPlan
+            {projects.map((rawProject) => {
+              const project = rawProject as any
+              const hasWorkPlan = !!project.methodology
               const legalInstrument = project.legalInstrumentInstance
               const status = project.status || "DRAFT"
 

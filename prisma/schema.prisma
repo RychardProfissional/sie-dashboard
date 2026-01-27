@@ -109,7 +109,22 @@ model Project {
   userId String
   user   User   @relation("ProjectCreator", fields: [userId], references: [id])
 
-  workPlan WorkPlan?
+  // Work Plan fields merged
+  diagnosis         String? @db.Text
+  methodology       String? @db.Text
+  responsibleUnit   String?
+  ictManager        String?
+  partnerManager    String?
+  monitoring        String? @db.Text
+  expectedResults   String? @db.Text
+  validityStart     DateTime?
+  validityEnd       DateTime?
+  specificObjectives Json?  @db.JsonB
+
+  workPlanSchedule  ScheduleItem[]
+  team              TeamMember[]
+  participants      Participant[]
+  responsibilities  Responsibility[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -126,44 +141,11 @@ model Project {
   @@index([submittedAt])
 }
 
-model WorkPlan {
-  id String @id @default(uuid())
-
-  projectId String  @unique
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  object            String? @db.Text
-  diagnosis         String? @db.Text
-  planScope         String? @db.Text
-  planJustification String? @db.Text
-
-  generalObjective   String @db.Text
-  specificObjectives Json?  @db.JsonB
-
-  methodology     String? @db.Text
-  responsibleUnit String?
-  ictManager      String?
-  partnerManager  String?
-
-  monitoring      String? @db.Text
-  expectedResults String? @db.Text
-
-  validityStart DateTime?
-  validityEnd   DateTime?
-
-  schedule         ScheduleItem[]
-  team             TeamMember[]
-  participants     Participant[]
-  responsibilities Responsibility[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
 
 model ScheduleItem {
-  id         String   @id @default(uuid())
-  workPlanId String
-  workPlan   WorkPlan @relation(fields: [workPlanId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   axisGoal    String
   actionStep  String         @db.Text
@@ -173,7 +155,7 @@ model ScheduleItem {
   endDate     DateTime
   status      ScheduleStatus @default(PLANNED)
 
-  @@index([workPlanId])
+  @@index([projectId])
 }
 
 model ProjectSchedule {
@@ -248,9 +230,9 @@ model TaskDependency {
 }
 
 model TeamMember {
-  id         String   @id @default(uuid())
-  workPlanId String
-  workPlan   WorkPlan @relation(fields: [workPlanId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   name          String
   titrationArea String?
@@ -258,13 +240,13 @@ model TeamMember {
   role          String?
   weeklyHours   Int?
 
-  @@index([workPlanId])
+  @@index([projectId])
 }
 
 model Participant {
-  id         String   @id @default(uuid())
-  workPlanId String
-  workPlan   WorkPlan @relation(fields: [workPlanId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   entityOrg String
   cnpj      String?
@@ -278,20 +260,20 @@ model Participant {
 
   responsibilities Responsibility[]
 
-  @@index([workPlanId])
+  @@index([projectId])
 }
 
 model Responsibility {
-  id         String   @id @default(uuid())
-  workPlanId String
-  workPlan   WorkPlan @relation(fields: [workPlanId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   participantId String?
   participant   Participant? @relation(fields: [participantId], references: [id])
 
   description String @db.Text
 
-  @@index([workPlanId])
+  @@index([projectId])
   @@index([participantId])
 }
 

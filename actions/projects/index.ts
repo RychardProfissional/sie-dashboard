@@ -143,12 +143,18 @@ export async function classifyProject(slug: string, type: LegalInstrumentType): 
     })
     if (!project) return { success: false, error: "Project not found" }
 
-    if (project.legalInstrumentInstance) {
-      return { success: false, error: "Project already classified" }
-    }
+    // Check for reclassification is handled inside transaction
 
     await prisma.$transaction(
       async (prismaTx) => {
+        // Check if reclassification is needed
+        if (project.legalInstrumentInstance) {
+          // Delete existing instance (Relation is 1:1, so we replace it)
+          await prismaTx.legalInstrumentInstance.delete({
+            where: { id: project.legalInstrumentInstance.id },
+          })
+        }
+
         const existingVersion = await prismaTx.legalInstrumentVersion.findUnique({
           where: {
             legalInstrumentId_revisionKey: {
@@ -193,9 +199,11 @@ export async function classifyProject(slug: string, type: LegalInstrumentType): 
           },
         })
 
-        // Log the action as PROJECT_CLASSIFIED
-        await logProjectAction(project.id, "PROJECT_CLASSIFIED", session.user.id, {
+        // Log the action
+        const actionType = project.legalInstrumentInstance ? "PROJECT_RECLASSIFIED" : "PROJECT_CLASSIFIED"
+        await logProjectAction(project.id, actionType as any, session.user.id, {
           instrumentType: type,
+          previousInstrumentId: project.legalInstrumentInstance?.id,
         })
 
         return instance
@@ -353,10 +361,9 @@ export async function submitProjectForApproval(slug: string): Promise<Project> {
   const project = await prisma.project.findUnique({
     where: { slug },
     include: {
-      workPlan: {
-        include: {
-          team: { select: { id: true } },
-        },
+      team: { select: { id: true } },
+      workPlanSchedule: {
+        select: { id: true },
       },
       schedule: {
         include: {
@@ -373,20 +380,20 @@ export async function submitProjectForApproval(slug: string): Promise<Project> {
   }
 
   // Validate that project is in DRAFT or RETURNED status
-  if (project.status !== ProjectStatus.DRAFT && (project.status as any) !== ProjectStatus.RETURNED) {
+  if (project.status !== ProjectStatus.DRAFT && project.status !== ProjectStatus.RETURNED) {
     throw new Error("Project cannot be submitted in its current status")
   }
 
-  // Phase 2: Validate classification wizard instead of legalInstrumentInstance
-  if (!(project as any).proposedInstrumentType || !(project as any).classificationAnswers) {
+  // Phase 2: Validate classification wizard
+  if (!project.proposedInstrumentType || !project.classificationAnswers) {
     throw new Error("Project must have a legal instrument classification before submission")
   }
 
-  if (!project.workPlan) {
-    throw new Error("Project must have a work plan before submission")
+  if (!project.methodology) {
+    throw new Error("Project must have technical methodology/content defined before submission")
   }
 
-  if (project.workPlan.team.length === 0) {
+  if (project.team.length === 0) {
     throw new Error("Project must have at least one team member defined")
   }
 
@@ -450,6 +457,7 @@ export async function submitProjectForApproval(slug: string): Promise<Project> {
           if (snapshot.objectives !== current.objectives) calculatedDiff.objectives = { from: snapshot.objectives, to: current.objectives }
           if (snapshot.justification !== current.justification) calculatedDiff.justification = { from: snapshot.justification, to: current.justification }
           if (snapshot.scope !== current.scope) calculatedDiff.scope = { from: snapshot.scope, to: current.scope }
+          if (snapshot.methodology !== full.methodology) calculatedDiff.methodology = { from: snapshot.methodology, to: full.methodology as string }
 
           if (Object.keys(calculatedDiff).length > 0) {
             diff = calculatedDiff
@@ -640,7 +648,7 @@ export async function requestProjectAdjustments(slug: string, reason: string): P
 
   const project = await prisma.project.findUnique({
     where: { slug },
-    select: { id: true, status: true, reviewStartedBy: true, userId: true, title: true, objectives: true, justification: true, scope: true },
+    select: { id: true, status: true, reviewStartedBy: true, userId: true, title: true, objectives: true, justification: true, scope: true, methodology: true, diagnosis: true },
   })
 
   if (!project) throw new Error("Project not found")
@@ -678,6 +686,8 @@ export async function requestProjectAdjustments(slug: string, reason: string): P
         objectives: project.objectives,
         justification: project.justification,
         scope: project.scope,
+        methodology: project.methodology,
+        diagnosis: project.diagnosis,
       }
 
       await logProjectAction(full.id, "RETURNED", session.user.id, { reason, toStatus: ProjectStatus.RETURNED, snapshot })
@@ -727,11 +737,11 @@ export async function getProjectsForApproval(filters?: GetProjectsForApprovalFil
     where.reviewStartedBy = session.user.id
   }
 
-  // Work Plan filters
+  // Work Plan filters (using methodology as proxy)
   if (hasWorkPlan) {
-    where.workPlan = { isNot: null }
+    where.methodology = { not: null }
   } else if (missingWorkPlan) {
-    where.workPlan = { is: null }
+    where.methodology = { equals: null }
   }
 
   // Legal Instrument filters
@@ -801,9 +811,9 @@ export async function getProjectsForApproval(filters?: GetProjectsForApprovalFil
     }
 
     if (hasWorkPlan) {
-      conditions.push(Prisma.sql`wp.id IS NOT NULL`)
+      conditions.push(Prisma.sql`p."methodology" IS NOT NULL`)
     } else if (missingWorkPlan) {
-      conditions.push(Prisma.sql`wp.id IS NULL`)
+      conditions.push(Prisma.sql`p."methodology" IS NULL`)
     }
 
     if (hasLegalInstrument) {
@@ -831,7 +841,6 @@ export async function getProjectsForApproval(filters?: GetProjectsForApprovalFil
       FROM "Project" p
       LEFT JOIN "User" u ON p."userId" = u.id
       LEFT JOIN "LegalInstrumentInstance" lii ON p.id = lii."projectId"
-      LEFT JOIN "WorkPlan" wp ON p.id = wp."projectId"
       ${whereClause}
     `
     total = Number(countResult[0].count)
@@ -856,16 +865,13 @@ export async function getProjectsForApproval(filters?: GetProjectsForApprovalFil
         u.name as "userName", u.email as "userEmail", u.color as "userColor",
         f.url as "userImageUrl",
         lii.status as "liiStatus",
-        liv.type as "livType",
-        li.name as "liName", li.description as "liDescription",
-        wp.id as "wpId"
+        li.name as "liName", li.description as "liDescription"
       FROM "Project" p
       LEFT JOIN "User" u ON p."userId" = u.id
       LEFT JOIN "File" f ON u."imageId" = f.id
       LEFT JOIN "LegalInstrumentInstance" lii ON p.id = lii."projectId"
       LEFT JOIN "LegalInstrumentVersion" liv ON lii."legalInstrumentVersionId" = liv.id
       LEFT JOIN "LegalInstrument" li ON liv."legalInstrumentId" = li.id
-      LEFT JOIN "WorkPlan" wp ON p.id = wp."projectId"
       ${whereClause}
       ORDER BY ${statusOrder} ${orderDir}, p."submittedAt" DESC
       LIMIT ${take} OFFSET ${skip}
@@ -892,7 +898,7 @@ export async function getProjectsForApproval(filters?: GetProjectsForApprovalFil
             },
           }
         : null,
-      workPlan: r.wpId ? { id: r.wpId } : null,
+      // workPlan relation removed
     }))
   } else {
     // Standard Prisma pagination for other sorts

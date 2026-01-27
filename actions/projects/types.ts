@@ -33,14 +33,10 @@ export const projectWithRelationsValidator = Prisma.validator<Prisma.ProjectDefa
         },
       },
     },
-    workPlan: {
-      include: {
-        schedule: true,
-        team: { select: { id: true, name: true, role: true } },
-        participants: true,
-        responsibilities: true,
-      },
-    },
+    workPlanSchedule: true,
+    team: { select: { id: true, name: true, role: true } },
+    participants: true,
+    responsibilities: true,
     schedule: {
       include: {
         milestones: {
@@ -72,7 +68,6 @@ export const projectWithRelationsValidator = Prisma.validator<Prisma.ProjectDefa
  */
 export const projectWithBasicRelationsValidator = Prisma.validator<Prisma.ProjectDefaultArgs>()({
   include: {
-    workPlan: { select: { id: true } },
     legalInstrumentInstance: {
       select: {
         status: true,
@@ -105,9 +100,6 @@ export const projectsForApprovalValidator = Prisma.validator<Prisma.ProjectDefau
           },
         },
       },
-    },
-    workPlan: {
-      select: { id: true },
     },
   },
 })

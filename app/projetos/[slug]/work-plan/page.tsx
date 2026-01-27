@@ -58,7 +58,7 @@ export default function Page() {
         notify.success("Plano de trabalho salvo com sucesso!")
         // Update locally to avoid a heavy refetch and improve responsiveness
         if (updateWorkPlan) {
-          updateWorkPlan(result.data || null)
+          updateWorkPlan(result.data as any)
         } else {
           await refetch()
         }
@@ -86,11 +86,11 @@ export default function Page() {
           const data = await getWorkPlan(project.id)
           if (data) {
             form.reset({
-              object: data.object || "",
+              object: data.title || "",
               diagnosis: data.diagnosis || "",
-              planScope: data.planScope || "",
-              planJustification: data.planJustification || "",
-              generalObjective: data.generalObjective || "",
+              planScope: data.scope || "",
+              planJustification: data.justification || "",
+              generalObjective: data.objectives || "",
               specificObjectives: data.specificObjectives.map((so) => ({ value: so })) || [],
               methodology: data.methodology || "",
               responsibleUnit: data.responsibleUnit || "",

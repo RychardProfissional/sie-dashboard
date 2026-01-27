@@ -16,7 +16,9 @@ interface ProjectCardProps {
   project: any // Could be typed more strictly if needed
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({ project: rawProject }: ProjectCardProps) {
+  const project = rawProject as any
+  const hasWorkPlan = !!project.methodology
   return (
     <Link href={`/admin/projetos/${project.slug}/review`} className="group block h-full">
       <Card className="h-full transition-all hover:shadow-md hover:border-primary/50 flex flex-col">
@@ -57,8 +59,8 @@ export function ProjectCard({ project }: ProjectCardProps) {
             <h4 className="text-xs font-semibold text-muted-foreground uppercase">Status das Dependências</h4>
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm">
-                <div className={`w-2 h-2 rounded-full ${project.workPlan ? "bg-green-500" : "bg-red-500"}`}></div>
-                <span className={project.workPlan ? "text-foreground" : "text-muted-foreground"}>Plano de Trabalho</span>
+                <div className={`w-2 h-2 rounded-full ${hasWorkPlan ? "bg-green-500" : "bg-red-500"}`}></div>
+                <span className={hasWorkPlan ? "text-foreground" : "text-muted-foreground"}>Plano de Trabalho</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <div className={`w-2 h-2 rounded-full ${project.legalInstrumentInstance ? "bg-green-500" : "bg-red-500"}`}></div>

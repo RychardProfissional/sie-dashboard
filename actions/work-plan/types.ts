@@ -1,4 +1,4 @@
-import { Prisma, WorkPlan } from "@prisma/client"
+import { Prisma, Project } from "@prisma/client"
 import { type WorkPlanFormData } from "@/lib/schemas/work-plan"
 
 // ============================================================================
@@ -8,9 +8,9 @@ import { type WorkPlanFormData } from "@/lib/schemas/work-plan"
 /**
  * Validator for basic WorkPlan query
  */
-export const workPlanValidator = Prisma.validator<Prisma.WorkPlanDefaultArgs>()({
+export const workPlanValidator = Prisma.validator<Prisma.ProjectDefaultArgs>()({
   include: {
-    schedule: true,
+    workPlanSchedule: true,
     team: true,
     participants: true,
     responsibilities: true,
@@ -21,7 +21,7 @@ export const workPlanValidator = Prisma.validator<Prisma.WorkPlanDefaultArgs>()(
 // OUTPUT TYPES - Direct Prisma.validator payloads
 // ============================================================================
 
-export type WorkPlanModel = Prisma.WorkPlanGetPayload<typeof workPlanValidator>
+export type WorkPlanModel = Prisma.ProjectGetPayload<typeof workPlanValidator>
 
 export type GetWorkPlanResponse = Omit<WorkPlanModel, "specificObjectives"> & {
   specificObjectives: string[]
@@ -32,7 +32,7 @@ export type GetWorkPlanResponse = Omit<WorkPlanModel, "specificObjectives"> & {
  */
 export interface UpsertWorkPlanResponse {
   success: boolean
-  data?: Prisma.WorkPlanGetPayload<typeof workPlanValidator>
+  data?: Prisma.ProjectGetPayload<typeof workPlanValidator>
   error?: string
 }
 
