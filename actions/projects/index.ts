@@ -9,7 +9,6 @@ import { APP_ERRORS } from "@/lib/errors"
 import { ResourceMembersType, Project, ProjectStatus, LegalInstrumentStatus, LegalInstrumentType } from "@prisma/client"
 import { Prisma } from "@prisma/client"
 import PermissionsService from "@/lib/services/permissions"
-import { notifyAdminsOfNewSubmission, notifyUserOfApproval, notifyUserOfRejection } from "@/lib/services/email"
 import { NotificationService } from "@/lib/services/notification"
 import { logProjectAction } from "@/lib/services/audit"
 import type { ProjectClassificationResult } from "@/types/legal-instrument"
@@ -189,22 +188,27 @@ export async function getAllProjects(): Promise<GetAllProjectsResponse> {
 
   const canViewAll = await PermissionsService.can(session.user.id, { slug: "projects.view.all" })
 
-  if (canViewAll) {
+  try {
+    if (canViewAll) {
+      const projects = await prisma.project.findMany({
+        ...projectWithBasicRelationsValidator,
+        orderBy: { updatedAt: "desc" },
+      })
+  
+      return projects
+    }
+  
     const projects = await prisma.project.findMany({
+      where: { userId: session.user.id },
       ...projectWithBasicRelationsValidator,
       orderBy: { updatedAt: "desc" },
     })
-
+  
     return projects
+  } catch (e) {
+    console.error(e)
+    return []
   }
-
-  const projects = await prisma.project.findMany({
-    where: { userId: session.user.id },
-    ...projectWithBasicRelationsValidator,
-    orderBy: { updatedAt: "desc" },
-  })
-
-  return projects
 }
 
 export async function getProjectLegalInstrument(slug: string) {

@@ -5,13 +5,15 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/config/auth"
 import { revalidatePath } from "next/cache"
 
-export async function getNotifications() {
+export async function getNotifications({ page = 1, pageSize }: { page: number, pageSize: number }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) throw new Error("Unauthorized")
 
   return prisma.notification.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
+    skip: page * pageSize,
+    take: pageSize,
   })
 }
 

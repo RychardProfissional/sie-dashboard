@@ -102,34 +102,10 @@ export async function getEmailsByPermissionSlug(slug: string): Promise<string[]>
   return users.map((u) => u.email!).filter(Boolean)
 }
 
-export async function notifyAdminsOfNewSubmission(project: { id: string; title: string; slug: string; user: { name?: string | null } }) {
-  const emails = await getEmailsByPermissionSlug("projects.approve")
-  if (!emails.length) return
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
-  const reviewUrl = `${baseUrl}/admin/projetos/${project.slug}/review`
-  await Promise.all(emails.map((to) => sendByTemplate("PROJECT_SUBMITTED", { projectTitle: project.title, submitterName: project.user.name ?? "Usuário", reviewUrl }, to)))
-}
-
 export async function notifyUserOfApproval(project: { title: string; slug: string; user: { email?: string | null } }, approver: { name?: string | null }) {
   const to = project.user.email
   if (!to) return
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
   const projectUrl = `${baseUrl}/projetos/${project.slug}`
   await sendByTemplate("PROJECT_APPROVED", { projectTitle: project.title, approverName: approver.name ?? "Administrador", projectUrl }, to)
-}
-
-export async function notifyUserOfRejection(project: { title: string; slug: string; user: { email?: string | null } }, reason: string, approver: { name?: string | null }) {
-  const to = project.user.email
-  if (!to) return
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
-  const projectUrl = `${baseUrl}/projetos/${project.slug}`
-  await sendByTemplate("PROJECT_REJECTED", { projectTitle: project.title, approverName: approver.name ?? "Administrador", reason, projectUrl }, to)
-}
-
-export async function notifyUserOfAdjustments(project: { title: string; slug: string; user: { email?: string | null } }, reason: string, approver: { name?: string | null }) {
-  const to = project.user.email
-  if (!to) return
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? "http://localhost:3000"
-  const projectUrl = `${baseUrl}/projetos/${project.slug}`
-  await sendByTemplate("PROJECT_RETURNED", { projectTitle: project.title, approverName: approver.name ?? "Administrador", reason, projectUrl }, to)
 }
