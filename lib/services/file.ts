@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand, type PutObjectCommandInput } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import prisma from "@/lib/config/db"
 import { v4 as uuidv4 } from "uuid"
@@ -8,20 +8,41 @@ class FileService {
   private client: S3Client
   private bucket: string
   private isDev: boolean
+  private isSupabase: boolean
+  private endpoint?: string
 
   constructor() {
     this.bucket = process.env.AWS_BUCKET_NAME || "sie-bucket"
     this.isDev = process.env.NODE_ENV !== "production"
 
+    // detect supabase or other S3-compatible endpoints
+    const rawEndpoint = process.env.AWS_ENDPOINT || undefined
+    this.isSupabase = Boolean(rawEndpoint && rawEndpoint.includes("supabase.co")) || process.env.S3_COMPAT === "supabase"
+
+    // normalize endpoint to origin (strip any path like /storage/v1)
+    if (rawEndpoint) {
+      try {
+        const url = new URL(rawEndpoint)
+        this.endpoint = url.origin
+      } catch (e) {
+        this.endpoint = rawEndpoint
+      }
+    }
+
     this.client = new S3Client({
       region: process.env.AWS_REGION || "us-east-1",
-      endpoint: process.env.AWS_ENDPOINT || undefined,
+      endpoint: this.endpoint || undefined,
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
       },
-      forcePathStyle: this.isDev,
+      // force path style in dev or when using supabase / S3-compatible endpoints
+      forcePathStyle: this.isDev || this.isSupabase,
     })
+
+    if (!this.bucket && process.env.NODE_ENV === "production") {
+      console.warn("Warning: AWS_BUCKET_NAME is not set in production environment")
+    }
   }
 
   async generatePresignedUrl(filename: string, contentType: string, folder: string = "uploads"): Promise<{ url: string; key: string; fileId: string }> {
@@ -29,15 +50,26 @@ class FileService {
     const extension = filename.split(".").pop()
     const key = `${folder}/${fileId}.${extension}`
 
-    const command = new PutObjectCommand({
+    const putParams: PutObjectCommandInput = {
       Bucket: this.bucket,
       Key: key,
       ContentType: contentType,
-      ACL: "public-read",
       Metadata: {
         "original-name": filename,
       },
-    })
+    }
+
+    // Supabase / some S3-compatible endpoints may reject ACL in presigned PUTs
+    if (!this.isSupabase) {
+      // only include ACL for real AWS S3
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore - SDK types accept ACL but in some configs it's rejected by provider
+      putParams.ACL = "public-read"
+    }
+
+    const command = new PutObjectCommand(putParams)
+
+    console.debug("generatePresignedUrl", { bucket: this.bucket, key, isSupabase: this.isSupabase, endpoint: this.endpoint })
 
     const signedUrl = await getSignedUrl(this.client, command, { expiresIn: 3600 })
 
@@ -54,11 +86,17 @@ class FileService {
       Key: key,
       Body: content,
       ContentType: contentType,
-      ACL: "public-read",
       Metadata: {
         "original-name": filename,
       },
     })
+
+    // include ACL for AWS S3 only
+    if (!this.isSupabase) {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      command.input.ACL = "public-read"
+    }
 
     await this.client.send(command)
 
