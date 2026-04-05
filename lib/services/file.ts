@@ -19,15 +19,7 @@ class FileService {
     const rawEndpoint = process.env.AWS_ENDPOINT || undefined
     this.isSupabase = Boolean(rawEndpoint && rawEndpoint.includes("supabase.co")) || process.env.S3_COMPAT === "supabase"
 
-    // normalize endpoint to origin (strip any path like /storage/v1)
-    if (rawEndpoint) {
-      try {
-        const url = new URL(rawEndpoint)
-        this.endpoint = url.origin
-      } catch (e) {
-        this.endpoint = rawEndpoint
-      }
-    }
+    this.endpoint = rawEndpoint
 
     this.client = new S3Client({
       region: process.env.AWS_REGION || "us-east-1",
