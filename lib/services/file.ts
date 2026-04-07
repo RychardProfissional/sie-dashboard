@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand, type PutObjectCommandInput } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import prisma from "@/lib/config/db"
 import { v4 as uuidv4 } from "uuid"
@@ -8,20 +8,31 @@ class FileService {
   private client: S3Client
   private bucket: string
   private isDev: boolean
+  private isSupabase: boolean
+  private endpoint?: string
 
   constructor() {
     this.bucket = process.env.AWS_BUCKET_NAME || "sie-bucket"
     this.isDev = process.env.NODE_ENV !== "production"
 
+    const rawEndpoint = process.env.AWS_ENDPOINT || undefined
+    this.isSupabase = Boolean(rawEndpoint && rawEndpoint.includes("supabase.co")) || process.env.S3_COMPAT === "supabase"
+
+    this.endpoint = rawEndpoint
+
     this.client = new S3Client({
       region: process.env.AWS_REGION || "us-east-1",
-      endpoint: process.env.AWS_ENDPOINT || undefined,
+      endpoint: this.endpoint || undefined,
       credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
       },
-      forcePathStyle: this.isDev,
+      forcePathStyle: this.isDev || this.isSupabase,
     })
+
+    if (!this.bucket && process.env.NODE_ENV === "production") {
+      console.warn("Warning: AWS_BUCKET_NAME is not set in production environment")
+    }
   }
 
   async generatePresignedUrl(filename: string, contentType: string, folder: string = "uploads"): Promise<{ url: string; key: string; fileId: string }> {
@@ -29,15 +40,22 @@ class FileService {
     const extension = filename.split(".").pop()
     const key = `${folder}/${fileId}.${extension}`
 
-    const command = new PutObjectCommand({
+    const putParams: PutObjectCommandInput = {
       Bucket: this.bucket,
       Key: key,
       ContentType: contentType,
-      ACL: "public-read",
       Metadata: {
         "original-name": filename,
       },
-    })
+    }
+
+    if (!this.isSupabase) {
+      putParams.ACL = "public-read"
+    }
+
+    const command = new PutObjectCommand(putParams)
+
+    console.debug("generatePresignedUrl", { bucket: this.bucket, key, isSupabase: this.isSupabase, endpoint: this.endpoint })
 
     const signedUrl = await getSignedUrl(this.client, command, { expiresIn: 3600 })
 
@@ -54,11 +72,14 @@ class FileService {
       Key: key,
       Body: content,
       ContentType: contentType,
-      ACL: "public-read",
       Metadata: {
         "original-name": filename,
       },
     })
+
+    if (!this.isSupabase) {
+      command.input.ACL = "public-read"
+    }
 
     await this.client.send(command)
 
