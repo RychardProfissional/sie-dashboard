@@ -37,17 +37,21 @@ export function PageShell({ children, className, ...props }: PageShellProps) {
   )
 }
 
-interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {}
+interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
+  direction?: "row" | "col"
+}
 
-export function PageHeader({ children, className, ...props }: PageHeaderProps) {
+export function PageHeader({ children, direction, className, ...props }: PageHeaderProps) {
+  let flexDirection = direction === "col" ? "flex-col justify-between items-start" : "flex-row justify-between items-center"
   return (
     <div
       data-solid="false"
       className={cn(
-        "page-header md:sticky md:top-14 md:z-20 -mx-8 px-8 py-4 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between space-y-2 transition-all",
+        "page-header md:sticky md:top-14 md:z-20 -mx-8 px-8 py-4 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex space-y-2 transition-all",
         // When merged, we remove the background and blur on desktop to avoid "double blur"
         "data-[solid=true]:md:bg-transparent data-[solid=true]:md:backdrop-blur-none data-[solid=true]:md:border-b-transparent",
-        className
+        className,
+        flexDirection,
       )}
       {...props}
     >

@@ -8,6 +8,7 @@ import { notify } from "@/lib/notifications"
 import { useProject } from "@/components/providers/project"
 
 import { Button } from "@/components/ui/button"
+import { CurrencyInput } from "@/components/ui/currency-input"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -231,8 +232,10 @@ export default function LegalInstrumentFillClient({ instance, projectSlug }: Leg
                 <Textarea id={field.id} value={answers[field.id] || ""} onChange={(e) => handleChange(field.id, e.target.value)} placeholder={`Digite ${field.label.toLowerCase()}...`} className="min-h-[100px]" disabled={!isEditable} />
               ) : field.type === "date" ? (
                 <Input id={field.id} type="date" value={answers[field.id] || ""} onChange={(e) => handleChange(field.id, e.target.value)} disabled={!isEditable} />
-              ) : field.type === "number" || field.type === "currency" ? (
-                <Input id={field.id} type="number" step={field.type === "currency" ? "0.01" : "1"} value={answers[field.id] || ""} onChange={(e) => handleChange(field.id, e.target.value)} placeholder={field.type === "currency" ? "0,00" : ""} disabled={!isEditable} />
+              ) : field.type === "currency" ? (
+                <CurrencyInput id={field.id} value={String(answers[field.id] || "")} onValueChange={(value) => handleChange(field.id, value)} placeholder="R$ 0,00" disabled={!isEditable} />
+              ) : field.type === "number" ? (
+                <Input id={field.id} type="number" step="1" value={answers[field.id] || ""} onChange={(e) => handleChange(field.id, e.target.value)} disabled={!isEditable} />
               ) : (
                 <Input id={field.id} type={field.type === "email" ? "email" : "text"} value={answers[field.id] || ""} onChange={(e) => handleChange(field.id, e.target.value)} placeholder={`Digite ${field.label.toLowerCase()}...`} disabled={!isEditable} />
               )}

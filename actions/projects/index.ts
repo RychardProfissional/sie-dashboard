@@ -107,7 +107,10 @@ export async function createLegalInstrument(slug: string, result: ProjectClassif
 
     const project = await prisma.project.findUnique({
       where: { slug: slug },
-      select: { id: true, legalInstrumentInstance: { select: { id: true } } },
+      select: {
+        id: true,
+        legalInstrumentInstance: { select: { id: true } },
+      },
     })
     if (!project) {
       console.error("Project not found")

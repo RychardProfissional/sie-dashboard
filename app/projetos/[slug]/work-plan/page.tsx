@@ -10,12 +10,15 @@ import { getWorkPlan, upsertWorkPlan } from "@/actions/work-plan"
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { CurrencyInput } from "@/components/ui/currency-input"
 import { Textarea } from "@/components/ui/textarea"
 import { notify } from "@/lib/notifications"
 import { Loader2, Plus, Trash2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import LoadingOverlay from "@/components/ui/loading-overlay"
 import { useRouter, useSearchParams } from "next/navigation"
+import { PageContent, PageHeader, PageHeaderDescription, PageHeaderHeading, PageShell } from "@/components/shell"
+import { legalInstrumentRequiresBudget } from "@/lib/utils/legal-instrument"
 
 export default function Page() {
   const searchParams = useSearchParams()
@@ -27,6 +30,7 @@ export default function Page() {
   const form = useForm<WorkPlanFormData>({
     resolver: zodResolver(workPlanSchema),
     defaultValues: {
+      budget: "",
       object: "",
       diagnosis: "",
       planScope: "",
@@ -49,6 +53,14 @@ export default function Page() {
 
   async function onSubmit(data: WorkPlanFormData) {
     if (!project?.id) return
+
+    const legalInstrumentType = project.legalInstrumentInstance?.legalInstrumentVersion?.type
+    const requiresBudget = legalInstrumentRequiresBudget(legalInstrumentType)
+    if (requiresBudget && !data.budget?.trim()) {
+      form.setError("budget", { type: "manual", message: "Orçamento é obrigatório para este instrumento jurídico." })
+      notify.error("Preencha o orçamento para continuar")
+      return
+    }
 
     setSaving(true)
     try {
@@ -85,6 +97,7 @@ export default function Page() {
           const data = await getWorkPlan(project.id)
           if (data) {
             form.reset({
+              budget: data.budget || "",
               object: data.object || "",
               diagnosis: data.diagnosis || "",
               planScope: data.planScope || "",
@@ -114,6 +127,14 @@ export default function Page() {
     loadData()
   }, [project?.id, projectLoading, form])
 
+  useEffect(() => {
+    if (projectLoading || loading || !project?.slug) return
+    if (!project.legalInstrumentInstance) {
+      notify.warning("Conclua o Instrumento Jurídico antes de iniciar o Plano de Trabalho.")
+      route.replace(`/projetos/${project.slug}/legal-instrument?next=work-plan`)
+    }
+  }, [projectLoading, loading, project, route])
+
   if (projectLoading || loading) {
     return (
       <div className="max-w-5xl w-full mx-auto py-8 space-y-8">
@@ -124,7 +145,7 @@ export default function Page() {
 
         <div className="space-y-8">
           {/* Informações Gerais */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="text-card-foreground">
             <div className="flex flex-col space-y-1.5 p-6">
               <Skeleton className="h-6 w-[200px]" />
             </div>
@@ -147,7 +168,7 @@ export default function Page() {
           </div>
 
           {/* Diagnóstico */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="text-card-foreground">
             <div className="flex flex-col space-y-1.5 p-6">
               <Skeleton className="h-6 w-[250px]" />
             </div>
@@ -162,7 +183,7 @@ export default function Page() {
           </div>
 
           {/* Objetivos */}
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="text-card-foreground">
             <div className="flex flex-col space-y-1.5 p-6">
               <Skeleton className="h-6 w-[150px]" />
             </div>
@@ -191,22 +212,43 @@ export default function Page() {
   }
 
   if (!project) return null
+  if (!project.legalInstrumentInstance) return null
+
+  const legalInstrumentType = project.legalInstrumentInstance.legalInstrumentVersion?.type
+  const requiresBudget = legalInstrumentRequiresBudget(legalInstrumentType)
 
   return (
-    <div className="max-w-5xl w-full mx-auto py-8 space-y-8">
+    <PageShell>
       <LoadingOverlay open={saving} message="Salvando plano de trabalho..." />
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Plano de Trabalho</h1>
-        <p className="text-muted-foreground mt-2">Defina os detalhes, objetivos e metodologia do projeto.</p>
-      </div>
+      <PageHeader direction="col">
+        <PageHeaderHeading>Plano de Trabalho</PageHeaderHeading>
+        <PageHeaderDescription>Defina os detalhes, objetivos e metodologia do projeto.</PageHeaderDescription>
+      </PageHeader>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <Card>
-            <CardHeader>
+      <PageContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="px-0 pb-4">
               <CardTitle>Informações Gerais</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </CardHeader>
+              <CardContent className="space-y-4 px-0">
+              <FormField
+                control={form.control}
+                name="budget"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Orçamento {requiresBudget ? <span className="text-destructive">*</span> : null}
+                    </FormLabel>
+                    <FormControl>
+                      <CurrencyInput placeholder="Ex.: R$ 150.000,00" value={field.value || ""} onValueChange={field.onChange} name={field.name} onBlur={field.onBlur} ref={field.ref} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="object"
@@ -249,14 +291,14 @@ export default function Page() {
                   )}
                 />
               </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="px-0 pb-4">
               <CardTitle>Diagnóstico e Justificativa</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </CardHeader>
+              <CardContent className="space-y-4 px-0">
               <FormField
                 control={form.control}
                 name="diagnosis"
@@ -296,14 +338,14 @@ export default function Page() {
                   </FormItem>
                 )}
               />
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="px-0 pb-4">
               <CardTitle>Objetivos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+              </CardHeader>
+              <CardContent className="space-y-6 px-0">
               <FormField
                 control={form.control}
                 name="generalObjective"
@@ -347,14 +389,14 @@ export default function Page() {
                 ))}
                 {fields.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum objetivo específico adicionado.</p>}
               </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="px-0 pb-4">
               <CardTitle>Metodologia e Resultados</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </CardHeader>
+              <CardContent className="space-y-4 px-0">
               <FormField
                 control={form.control}
                 name="methodology"
@@ -394,14 +436,14 @@ export default function Page() {
                   </FormItem>
                 )}
               />
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
+            <Card className="border-0 bg-transparent shadow-none">
+              <CardHeader className="px-0 pb-4">
               <CardTitle>Responsáveis</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 px-0">
               <FormField
                 control={form.control}
                 name="responsibleUnit"
@@ -441,17 +483,18 @@ export default function Page() {
                   </FormItem>
                 )}
               />
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <div className="flex justify-end">
-            <Button type="submit" disabled={saving} size="lg">
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar Plano de Trabalho
-            </Button>
-          </div>
-        </form>
-      </Form>
-    </div>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={saving} size="lg">
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar Plano de Trabalho
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </PageContent>
+    </PageShell>
   )
 }

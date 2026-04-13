@@ -1,6 +1,7 @@
 import { ProjectForm } from "@/components/forms/project/create"
 import { Project } from "@prisma/client"
 import { getProjectBySlug } from "@/actions/projects"
+import { PageContent, PageHeader, PageHeaderDescription, PageHeaderHeading, PageShell } from "@/components/shell"
 
 interface PageProps {
   searchParams: Promise<{ slug?: string }>
@@ -19,15 +20,15 @@ export default async function NovaPaginaProjeto(props: PageProps) {
   }
 
   return (
-    <div className="max-w-5xl w-full mx-auto py-8 space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Novo Projeto</h1>
-        <p className="text-muted-foreground mt-2">Preencha os dados para criar um novo projeto.</p>
-      </div>
+    <PageShell>
+      <PageHeader direction="col">
+        <PageHeaderHeading>Novo Projeto</PageHeaderHeading>
+        <PageHeaderDescription>Preencha os dados para criar um novo projeto.</PageHeaderDescription>
+      </PageHeader>
 
-      <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
+      <PageContent className="rounded-xl text-card-foreground shadow-sm p-6">
         <ProjectForm initialProject={initialProject} embedded />
-      </div>
-    </div>
+      </PageContent>
+    </PageShell>
   )
 }

@@ -128,7 +128,7 @@ export function ProjectClassificationStart({ projectSlug, onStart, onResume }: P
             </>
           ) : (
             <Button size="lg" onClick={handleStart} className="w-full h-12 text-base shadow-sm hover:shadow-md transition-all" disabled={hasExisting || checking}>
-              {hasExisting ? "Reiniciar Classificação" : "Iniciar Assistente"}
+              {checking ? "Carregando..." : hasExisting ? "Reiniciar Classificação" : "Iniciar Assistente"}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           )}

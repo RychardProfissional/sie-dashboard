@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 export const workPlanSchema = z.object({
+  budget: z.string().optional(),
   object: z.string().optional(),
   diagnosis: z.string().optional(),
   planScope: z.string().optional(),

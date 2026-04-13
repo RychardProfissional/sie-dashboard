@@ -17,49 +17,46 @@ import { checkPermission } from "@/actions/permissions"
 export function OTPForm({ ...props }: React.ComponentProps<typeof Card>) {
   const [code, setCode] = useState("")
   const [timeLeft, setTimeLeft] = useState(25)
+  const [loading, setLoading] = useState(false)
 
   const params = useSearchParams()
   const router = useRouter()
 
   const email = params.get("email") ?? ""
 
-  useEffect(() => {
-    if (timeLeft <= 0) return
-
-    const intervalId = setInterval(() => {
-      setTimeLeft((prev) => prev - 1)
-    }, 1000)
-
-    return () => clearInterval(intervalId)
-  }, [timeLeft])
-
   const handleVerify = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!email) return notify.error(APP_ERRORS.AUTH_EMAIL_REQUIRED.code)
+    setLoading(true)
+    try {
 
-    const res = await signIn("credentials", {
-      email,
-      code,
-      redirect: false,
-    })
-
-    if (res?.error) {
-      console.error(res.error)
-
-      if (res.error === "CredentialsSignin") {
-        notify.error(APP_ERRORS.AUTH_INCORRECT_CODE.code)
-      } else {
-        notify.error(res.error)
+      if (!email) return notify.error(APP_ERRORS.AUTH_EMAIL_REQUIRED.code)
+  
+      const res = await signIn("credentials", {
+        email,
+        code,
+        redirect: false,
+      })
+  
+      if (res?.error) {
+        console.error(res.error)
+  
+        if (res.error === "CredentialsSignin") {
+          notify.error(APP_ERRORS.AUTH_INCORRECT_CODE.code)
+        } else {
+          notify.error(res.error)
+        }
+        return
       }
-      return
-    }
-
-    const session = await getSession()
-    if (session?.user?.firstAccess) {
-      router.push("/conta/primeiro-acesso")
-    } else if (session?.user) {
-      const { can } = await checkPermission('projects.approve')
-      router.push(can ? "/admin/projetos" : "/projetos")
+  
+      const session = await getSession()
+      if (session?.user?.firstAccess) {
+        router.push("/conta/primeiro-acesso")
+      } else if (session?.user) {
+        const { can } = await checkPermission('projects.approve')
+        router.push(can ? "/admin/projetos" : "/projetos")
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -76,6 +73,16 @@ export function OTPForm({ ...props }: React.ComponentProps<typeof Card>) {
       notify.error(message || APP_ERRORS.AUTH_SEND_FAILED.code)
     }
   }
+
+  useEffect(() => {
+    if (timeLeft <= 0) return
+
+    const intervalId = setInterval(() => {
+      setTimeLeft((prev) => prev - 1)
+    }, 1000)
+
+    return () => clearInterval(intervalId)
+  }, [timeLeft])
 
   return (
     <Card {...props}>
@@ -104,7 +111,7 @@ export function OTPForm({ ...props }: React.ComponentProps<typeof Card>) {
               </InputOTP>
               <FieldDescription className="text-center">Digite o número recebido em seu e-mail.</FieldDescription>
             </Field>
-            <Button type="submit">Verificar</Button>
+            {(loading ? <Button type="button" disabled>Verificando...</Button> : <Button type="submit">Verificar</Button>)}
             <FieldDescription className="text-center">
               Não recebeu?{" "}
               <button type="button" onClick={handleResend} className="underline disabled:opacity-50 disabled:cursor-not-allowed" disabled={timeLeft > 0}>

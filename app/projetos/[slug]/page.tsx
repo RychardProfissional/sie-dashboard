@@ -12,6 +12,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useProject } from "@/components/providers/project"
 import { cn } from "@/lib/utils"
+import { computeMissingDependencies } from "@/lib/config/project-dependencies"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PageContent, PageHeader, PageHeaderHeading, PageShell, PageBack } from "@/components/shell"
@@ -34,6 +35,7 @@ type MissingDependency = {
   link: string
   action: string
   icon: LucideIcon
+  blocked?: boolean
 }
 
 type ProjectLegalInstrumentInstance = NonNullable<ProjectDependences["legal-instrument"]>
@@ -81,9 +83,6 @@ export default function ProjectDetailsPage() {
   console.log("specificObjectives: ", specificObjectives)
   console.log("workPlan: ", workPlan?.specificObjectives)
 
-  // Calculate dependencies
-  const missingDependencies: MissingDependency[] = []
-
   const hasWorkPlan = !!workPlan
   const hasLegalInstrument = !!legalInstrumentInstance
   const hasPendingInstrument = hasLegalInstrument && (legalInstrumentInstance?.status || LegalInstrumentStatus.PENDING) !== LegalInstrumentStatus.FILLED
@@ -113,41 +112,13 @@ export default function ProjectDetailsPage() {
     }
   }
 
-  // 1. Work Plan Dependency
-  if (!workPlan) {
-    missingDependencies.push({
-      id: "work-plan",
-      label: "Plano de Trabalho",
-      description: "O plano de trabalho ainda não foi criado. É necessário definir metas e cronograma.",
-      link: `/projetos/${project.slug}/work-plan`,
-      action: "Criar Plano",
-      icon: FileText,
-    })
+  const rawMissing = computeMissingDependencies(project, dependences, project.slug!, { mode: "all" })
+  const iconMap: Record<string, LucideIcon> = {
+    "work-plan": FileText,
+    "legal-instrument-select": Scale,
+    "legal-instrument-fill": Scale,
   }
-
-  // 2. Legal Instrument Dependency
-  if (!legalInstrumentInstance) {
-    missingDependencies.push({
-      id: "legal-instrument-select",
-      label: "Instrumento Jurídico",
-      description: "Instrumento jurídico ainda não foi selecionado para este projeto.",
-      link: `/projetos/${project.slug}/legal-instrument`,
-      action: "Selecionar",
-      icon: Scale,
-    })
-  } else {
-    if ((legalInstrumentInstance.status || LegalInstrumentStatus.PENDING) !== LegalInstrumentStatus.FILLED) {
-      const instrumentName = legalInstrumentInstance.legalInstrumentVersion.legalInstrument.name
-      missingDependencies.push({
-        id: `legal-instrument-fill-${legalInstrumentInstance.id}`,
-        label: `Preencher ${instrumentName}`,
-        description: "O instrumento jurídico precisa ser preenchido para gerar o documento.",
-        link: `/projetos/${project.slug}/legal-instrument/fill`,
-        action: "Preencher",
-        icon: Scale,
-      })
-    }
-  }
+  const missingDependencies: MissingDependency[] = rawMissing.map((m) => ({ id: m.id, label: m.label, description: m.description, link: m.link, action: m.action, icon: iconMap[m.id] ?? Scale, blocked: (m as any).blocked }))
 
   return (
     <PageShell>
@@ -325,9 +296,29 @@ export default function ProjectDetailsPage() {
                         <AlertCircle className="h-5 w-5" />
                         Pendências do Projeto
                       </div>
-                      {missingDependencies.map((dep) => (
-                        <DependencyCard key={dep.id} title={dep.label} description={dep.description} icon={dep.icon} actionLabel={dep.action} actionLink={dep.link} variant="warning" readOnly={!view?.allowActions} />
-                      ))}
+                      <div className="relative space-y-4 before:absolute before:inset-y-3 before:left-[11px] before:w-[2px] before:bg-orange-200 dark:before:bg-orange-900/50">
+                        {missingDependencies.map((dep, index) => (
+                          <div key={dep.id} className="relative pl-10">
+                            <div className={cn(
+                              "absolute left-0 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 bg-background text-[10px] font-bold shadow-sm",
+                              dep.blocked ? "border-muted text-muted-foreground" : "border-orange-500 text-orange-600 dark:border-orange-600 dark:text-orange-400"
+                            )}>
+                              {index + 1}
+                            </div>
+                            <DependencyCard
+                              title={dep.label}
+                              description={dep.description}
+                              icon={dep.icon}
+                              actionLabel={dep.action}
+                              actionLink={dep.link}
+                              variant="warning"
+                              readOnly={!view?.allowActions}
+                              disabled={!!dep.blocked}
+                              blockedReason="Conclua a pendência anterior para habilitar esta etapa."
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
 

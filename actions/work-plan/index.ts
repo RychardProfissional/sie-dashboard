@@ -5,6 +5,7 @@ import { type WorkPlanFormData } from "@/lib/schemas/work-plan"
 import { ProjectStatus } from "@prisma/client"
 import { workPlanValidator, GetWorkPlanResponse, UpsertWorkPlanResponse } from "./types"
 import { revalidatePath } from "next/cache"
+import { legalInstrumentRequiresBudget } from "@/lib/utils/legal-instrument"
 
 export async function getWorkPlan(projectId: string): Promise<GetWorkPlanResponse | null> {
   try {
@@ -44,7 +45,16 @@ export async function upsertWorkPlan(projectId: string, data: WorkPlanFormData):
   try {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { status: true },
+      select: {
+        status: true,
+        legalInstrumentInstance: {
+          select: {
+            legalInstrumentVersion: {
+              select: { type: true },
+            },
+          },
+        },
+      },
     })
 
     if (!project) {
@@ -55,15 +65,25 @@ export async function upsertWorkPlan(projectId: string, data: WorkPlanFormData):
       return { success: false, error: "Project is locked for editing" }
     }
 
+    const legalInstrumentType = project.legalInstrumentInstance?.legalInstrumentVersion?.type
+    const normalizedBudget = data.budget?.trim() || null
+    const requiresBudget = legalInstrumentRequiresBudget(legalInstrumentType)
+
+    if (requiresBudget && !normalizedBudget) {
+      return { success: false, error: "Este instrumento jurídico exige o preenchimento do orçamento." }
+    }
+
     const workPlan = await prisma.workPlan.upsert({
       where: { projectId },
       create: {
         projectId,
         ...data,
+        budget: normalizedBudget,
         specificObjectives: data.specificObjectives,
       },
       update: {
         ...data,
+        budget: normalizedBudget,
         specificObjectives: data.specificObjectives,
       },
       ...workPlanValidator,

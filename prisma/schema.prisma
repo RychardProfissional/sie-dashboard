@@ -115,6 +115,7 @@ model WorkPlan {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   object            String? @db.Text
+  budget            String?
   diagnosis         String? @db.Text
   planScope         String? @db.Text
   planJustification String? @db.Text
